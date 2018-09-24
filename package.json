@@ -18,5 +18,8 @@
   "bugs": {
     "url": "https://github.com/percy/percy-cypress/issues"
   },
-  "homepage": "https://github.com/percy/percy-cypress#readme"
+  "homepage": "https://github.com/percy/percy-cypress#readme",
+  "devDependencies": {
+    "typescript": "^3.0.3"
+  }
 }
