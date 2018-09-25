@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc"
+    "build": "tsc",
+    "lint": "tslint -p . -t stylish --fix"
   },
   "repository": {
     "type": "git",
@@ -15,6 +16,9 @@
   "keywords": [
     "cypress"
   ],
+  "engines": {
+    "node": ">=8.0.0"
+  },
   "author": "Perceptual Inc.",
   "license": "MIT",
   "bugs": {
@@ -22,6 +26,8 @@
   },
   "homepage": "https://github.com/percy/percy-cypress#readme",
   "devDependencies": {
+    "@oclif/tslint": "^3.1.0",
+    "tslint": "^5.11.0",
     "typescript": "^3.0.3"
   },
   "dependencies": {
