@@ -6,6 +6,6 @@ Cypress SDK for visual regression testing with [Percy](https://percy.io).
 
 ## Resources
 
-* [Setup and Integration Docs](https://docs.percy.io/docs/cypress)
+* [Setup and integration docs](https://docs.percy.io/docs/cypress)
 * [Tutorial](https://docs.percy.io/docs/cypress-tutorial)
 * [Example integration](https://github.com/percy/example-percy-cypress)
