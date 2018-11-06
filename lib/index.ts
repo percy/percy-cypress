@@ -14,6 +14,11 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
 
   cy.document().then((doc: Document) => {
     options.document = doc
-    percyAgentClient.snapshot(name, options)
+
+    try {
+      percyAgentClient.snapshot(name, options)
+    } catch (e) {
+      cy.log('WARNING! percy is not started. See https://docs.percy.io for help.')
+    }
   })
 })
