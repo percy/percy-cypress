@@ -1,0 +1,25 @@
+version: 2
+dependencies:
+- type: js
+  path: ./
+  settings:
+    # set the NODE_ENV env variable
+    # default: development
+    node_env: production
+
+    # by default we'll collect the package.json versions under the "latest" dist-tag (default npm behavior)
+    # if you want to follow a specific dist-tag (like "next" or "unstable"), then you
+    # can specify that here by the package name
+    # default: none
+    dist_tags:
+      semantic-release: next
+
+    # github options
+    github_labels:  # list of label names
+    - dependencies
+
+    github_assignees:  # list of usernames
+    - djones
+
+    related_pr_behavior: close
+
