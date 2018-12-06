@@ -42,6 +42,9 @@ describe('@percy/cypress', function() {
 
   describe('with live sites', function() {
 
+    // The tests in this block require setting '"chromeWebSecurity": false' in cypress.json.
+    // For details, see: https://docs.cypress.io/guides/guides/web-security.html#Disabling-Web-Security
+
     it('snapshots HTTPS website', function() {
       cy.visit('https://polaris.shopify.com/')
       cy.percySnapshot('Polaris HTTPS', { widths: [768, 992, 1200] })
