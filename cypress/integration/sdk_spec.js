@@ -52,7 +52,7 @@ describe('@percy/cypress', function() {
 
     it('snapshots website with strict CSP', function() {
       cy.visit('https://buildkite.com/')
-      cy.percySnapshot('Buildkite HTTPS + CSP', { widths: [768, 992, 1200] })
+      cy.percySnapshot('Buildkite HTTPS + CSP', { widths: [768, 992, 1200], enableJavaScript: true })
     })
   })
 
