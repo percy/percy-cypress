@@ -36,6 +36,7 @@
     "typescript": "^3.0.3"
   },
   "dependencies": {
-    "@percy/agent": "^0.1.2"
+    "@percy/agent": "^0.1.14",
+    "healthcheck-cli": "^1.0.1"
   }
 }

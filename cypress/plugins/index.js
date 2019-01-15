@@ -14,4 +14,13 @@
 module.exports = (on, config) => {
   // `on` is used to hook into various events Cypress emits
   // `config` is the resolved Cypress config
+
+  // Make it possible to log things to stdout by calling 'cy.task('log', 'some message to log').
+  // Useful for development and debugging.
+  on('task', {
+    log (message) {
+      console.log(message)
+      return null
+    }
+  })
 }
