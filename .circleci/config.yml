@@ -1,10 +1,36 @@
-version: 2
+version: 2.1
+
+default_steps: &default_steps
+  steps:
+    - checkout
+    - restore_cache:
+        keys:
+        - v1-dependencies-{{ checksum "package.json" }}
+        # fallback to using the latest cache if no exact match is found
+        - v1-dependencies-
+    - run: npm install
+    - save_cache:
+        paths:
+          - node_modules
+        key: v1-dependencies-{{ checksum "package.json" }}
+    - run: npm test
+
 jobs:
-  build:
+  node_8:
+    docker:
+      - image: circleci/node:8-browsers
+    environment:
+      PERCY_ENABLE: 0
+    <<: *default_steps
+  node_10_with_percy:
+    # We've opted this node version to be the one that runs and reports Percy's status
     docker:
       - image: circleci/node:10-browsers
-    steps:
-      - checkout
-      - run: npm install
-      - run: npm run build
-      - run: npm run snapshots
+    <<: *default_steps
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - node_8
+      - node_10_with_percy
