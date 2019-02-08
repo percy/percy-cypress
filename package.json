@@ -5,9 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "test": "npm run build && ./run-tests.sh",
-    "snapshots": "percy exec -- npm run test",
-    "snapshots:debug": "LOG_LEVEL=debug percy exec -- npm run test",
+    "pretest": "npm run build",
+    "test": "percy exec -- ./run-tests.sh",
+    "test:debug": "LOG_LEVEL=debug npm run test",
     "build": "tsc",
     "lint": "tslint -p . -t stylish --fix",
     "cypress:open": "cypress open"
