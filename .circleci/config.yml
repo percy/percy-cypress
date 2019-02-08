@@ -5,14 +5,15 @@ default_steps: &default_steps
     - checkout
     - restore_cache:
         keys:
-        - v1-dependencies-{{ checksum "package.json" }}
+        - v3-dependencies-{{ checksum "package.json" }}
         # fallback to using the latest cache if no exact match is found
-        - v1-dependencies-
+        - v3-dependencies-
     - run: npm install
     - save_cache:
         paths:
           - node_modules
-        key: v1-dependencies-{{ checksum "package.json" }}
+          - ~/.cache
+        key: v3-dependencies-{{ checksum "package.json" }}
     - run: npm test
 
 jobs:
