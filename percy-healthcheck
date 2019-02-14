@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+'use strict'
+
+// Healthcheck script that checks if Percy agent is running on this host.
+// Accepts optional port argument, defaults to default agent port:
+//   percy-healthcheck <port (optional)>
+
+const http = require('http')
+
+const healtcheck = options => {
+  return new Promise((resolve, reject) => {
+    const request = http.request(options, res => {
+      resolve(res.statusCode === 200)
+    })
+    request.on('error', err => reject(err))
+    request.end()
+  })
+}
+
+const options = {
+  host: 'localhost',
+  port: process.argv[2] || 5338,
+  path: '/percy/healthcheck',
+  timeout: 2000
+}
+
+healtcheck(options)
+  .then(result => process.exit(result ? 0 : 1))
+  .catch(() => process.exit(1))

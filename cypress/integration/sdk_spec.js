@@ -54,6 +54,11 @@ describe('@percy/cypress', function() {
       cy.visit('https://buildkite.com/')
       cy.percySnapshot('Buildkite HTTPS + CSP', { widths: [768, 992, 1200] })
     })
+
+    it('snapshots website with CORS', function() {
+      cy.visit('https://medium.com')
+      cy.percySnapshot('Medium HTTPS + CORS')
+    })
   })
 
 })

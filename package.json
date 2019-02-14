@@ -4,8 +4,13 @@
   "description": "Cypress client library for visual regression testing with Percy (https://percy.io).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "percy-healthcheck": "percy-healthcheck"
+  },
   "scripts": {
-    "pretest": "npm run build",
+    "cp-healthcheck-to-bin": "cp percy-healthcheck `npm bin`",
+    "pretest": "npm run build && npm run cp-healthcheck-to-bin",
+    "posttest": "rm `npm bin`/percy-healthcheck",
     "test": "percy exec -- ./run-tests.sh",
     "test:debug": "LOG_LEVEL=debug npm run test",
     "build": "tsc",
@@ -36,6 +41,6 @@
     "typescript": "^3.0.3"
   },
   "dependencies": {
-    "@percy/agent": "^0.1.2"
+    "@percy/agent": "^0.1.14"
   }
 }
