@@ -8,10 +8,8 @@
     "percy-healthcheck": "percy-healthcheck"
   },
   "scripts": {
-    "cp-healthcheck-to-bin": "cp percy-healthcheck `npm bin`",
-    "pretest": "npm run build && npm run cp-healthcheck-to-bin",
-    "posttest": "rm `npm bin`/percy-healthcheck",
-    "test": "percy exec -- ./run-tests.sh",
+    "pretest": "npm run build",
+    "test": "percy exec -- node run-tests.js",
     "test:debug": "LOG_LEVEL=debug npm run test",
     "build": "tsc",
     "lint": "tslint -p . -t stylish --fix",
