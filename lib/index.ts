@@ -4,17 +4,18 @@ import PercyAgent from '@percy/agent'
 declare const Cypress: any
 declare const cy: any
 
-
 Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   const percyAgentClient = new PercyAgent({ handleAgentCommunication: false })
 
   // Use cy.exec(...) to check if percy agent is running. Ideally this would be
   // done using something like cy.request(...), but that's not currently possible,
   // for details, see: https://github.com/cypress-io/cypress/issues/3161
-  const healthcheck = `\`npm bin\`/percy-healthcheck ${percyAgentClient.port}`
+  // We rely on node finding the percy-healtcheck binary and running it correctly,
+  // which is more cross-platform friendly than running the script directly ourselves.
+  const healthcheck = `node percy-healthcheck ${percyAgentClient.port}`
   cy.exec(healthcheck, {failOnNonZeroExit: false}).then((result: any) => {
     if (result.code != 0) {
-      // Percy server not available.
+      // Percy server not available, or we failed to find the healthcheck.
       cy.log('[percy] Percy agent is not running. Skipping snapshots')
       return
     }
