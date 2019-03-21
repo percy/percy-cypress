@@ -1,6 +1,6 @@
 {
   "name": "@percy/cypress",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Cypress client library for visual regression testing with Percy (https://percy.io).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
