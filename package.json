@@ -11,7 +11,9 @@
     "pretest": "npm run build",
     "test": "percy exec -- node run-tests.js",
     "test:debug": "LOG_LEVEL=debug npm run test",
-    "build": "tsc",
+    "clean": "rm -rf dist/",
+    "build": "npm run clean && tsc",
+    "prepublish": "npm run build",
     "lint": "tslint -p . -t stylish --fix",
     "cypress:open": "cypress open"
   },
