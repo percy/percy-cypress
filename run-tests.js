@@ -4,13 +4,14 @@ const port = process.env.PORT_NUMBER || 8000;
 const spawn = require('child_process').spawn;
 const platform = require('os').platform();
 
-// Copy our healthcheck binary to the 'node_modules/.bin' directory where it will be
+// Copy our healthcheck script to node_modules, where it will be
 // when this package is installed as a dependency.
-const src = 'percy-healthcheck'
+const src = 'lib/percy-healthcheck'
 const copyDst = /^win/.test(platform)
-      ? `${process.cwd()}\\node_modules\\.bin\\percy-healthcheck`
-      : `${__dirname}/node_modules/.bin/percy-healthcheck`;
+      ? `${process.cwd()}\\node_modules\\@percy\\cypress\\dist\\percy-healthcheck`
+      : `${__dirname}/node_modules/@percy/cypress/dist/percy-healthcheck`;
 console.log(`[run-tests] Copying ${src} to ${copyDst}`);
+fs.mkdirSync('./node_modules/@percy/cypress/dist', { recursive: true });
 fs.copyFileSync(src, copyDst);
 
 // We need to change the command path based on the platform they're using
