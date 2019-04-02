@@ -43,17 +43,25 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   })
 })
 
+const checkResolved = (x: string) => {
+  // we are resolving a path to the module
+  // and Webpack changes it to a number, then something is wrong
+  if (typeof x !== 'string') {
+    throw new Error('Should be a string')
+  }
+  return x
+}
 
 // An attempt to resiliently find the path to the 'percy-healthcheck' script, and to do so
 // in a cross-platform manner.
 function _healthcheckPath() {
   try {
     // Try to resolve with respect to the install local module.
-    return require.resolve('@percy/cypress/dist/percy-healthcheck')
+    return checkResolved(require.resolve('@percy/cypress/dist/percy-healthcheck'))
   } catch {
     try {
       // Try to resolve relative to the current file.
-      return require.resolve('./percy-healthcheck')
+      return checkResolved(require.resolve('./percy-healthcheck'))
     } catch {
       // Oh well. Assume it's in the local node_modules.
       // It would be nice to use __dirname here, but this code is entirely executed inside of
