@@ -1,6 +1,6 @@
 {
   "name": "@percy/cypress",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Cypress client library for visual regression testing with Percy (https://percy.io).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,6 +24,9 @@
   "engines": {
     "node": ">=8.0.0"
   },
+  "files": [
+    "dist"
+  ],
   "author": "Perceptual Inc.",
   "license": "MIT",
   "bugs": {
