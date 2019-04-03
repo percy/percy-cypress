@@ -14,12 +14,13 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   // Use cy.exec(...) to check if percy agent is running. Ideally this would be
   // done using something like cy.request(...), but that's not currently possible,
   // for details, see: https://github.com/cypress-io/cypress/issues/3161
-  const healthcheck = `node ${_healthcheckPath()} ${percyAgentClient.port}`
-  cy.exec(healthcheck, {failOnNonZeroExit: false}).then((result: any) => {
-    if (result.code != 0) {
-      // Percy server not available, or we failed to find the healthcheck.
+  const healthcheckCmd = `percy health-check -p ${percyAgentClient.port}`
+  cy.exec(healthcheckCmd, { failOnNonZeroExit: false }).then(({ stderr }: any) => {
+    if (stderr) {
+      // Percy server not available
       cy.log('[percy] Percy agent is not running. Skipping snapshots')
-      cy.log(`[percy] Healthcheck output: ${result.stdout}\n${result.stderr}`)
+      cy.log(stderr)
+
       return
     }
 
@@ -45,24 +46,3 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
     })
   })
 })
-
-
-// An attempt to resiliently find the path to the 'percy-healthcheck' script, and to do so
-// in a cross-platform manner.
-function _healthcheckPath() {
-  try {
-    // Try to resolve with respect to the install local module.
-    return require.resolve('@percy/cypress/dist/percy-healthcheck')
-  } catch {
-    try {
-      // Try to resolve relative to the current file.
-      return require.resolve('./percy-healthcheck')
-    } catch {
-      // Oh well. Assume it's in the local node_modules.
-      // It would be nice to use __dirname here, but this code is entirely executed inside of
-      // Cypress' unusual context, making __dirname always '/dist' for this file, which is
-      // unhelpful when trying to find a working filesystem path to percy-healthcheck.
-      return path.join('.', './node_modules/@percy/cypress/dist/percy-healthcheck')
-    }
-  }
-}
