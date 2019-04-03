@@ -14,12 +14,12 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   // Use cy.exec(...) to check if percy agent is running. Ideally this would be
   // done using something like cy.request(...), but that's not currently possible,
   // for details, see: https://github.com/cypress-io/cypress/issues/3161
-  const healthcheckCmd = `node ${HEALTHCHECK_PATH} ${percyAgentClient.port}`
-  cy.exec(healthcheckCmd, { failOnNonZeroExit: false }).then((result: any) => {
-    if (result.code !== 0) {
+  const healthcheckCmd = `percy health-check -p ${percyAgentClient.port}`
+  cy.exec(healthcheckCmd, { failOnNonZeroExit: false }).then(({ stderr }: any) => {
+    if (stderr) {
       // Percy server not available, or we failed to find the healthcheck.
       cy.log('[percy] Percy agent is not running. Skipping snapshots')
-      cy.log(`[percy] Healthcheck output: ${result.stdout}\n${result.stderr}`)
+      cy.log(stderr)
 
       return
     }
