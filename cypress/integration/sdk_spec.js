@@ -41,12 +41,7 @@ describe('@percy/cypress', function() {
 
     it('snapshots part of a page', function() {
       cy.percySnapshot('With a passed domTransformation function', {
-        domTransformation: (documentClone) => {
-          let footerElement = documentClone.querySelector('footer.info');
-          documentClone.querySelector('body').innerHTML = footerElement.outerHTML;
-
-          return documentClone;
-        }
+        domTransformation: documentClone => scope(documentClone, 'footer.info')
       })
     })
   })
@@ -73,3 +68,11 @@ describe('@percy/cypress', function() {
   })
 
 })
+
+
+function scope(documentClone, selector) {
+  let element = documentClone.querySelector(selector);
+  documentClone.querySelector('body').innerHTML = element.outerHTML;
+
+  return documentClone;
+}
