@@ -9,7 +9,7 @@
     "test": "percy exec -- node run-tests.js",
     "test:debug": "LOG_LEVEL=debug npm run test",
     "clean": "rm -rf dist/",
-    "build": "npm run clean && tsc && cp lib/percy-healthcheck dist/percy-healthcheck",
+    "build": "npm run clean && tsc",
     "prepublish": "npm run build",
     "lint": "tslint -p . -t stylish --fix",
     "cypress:open": "cypress open"
@@ -38,6 +38,6 @@
     "typescript": "^3.0.3"
   },
   "dependencies": {
-    "@percy/agent": "^0.1.14"
+    "@percy/agent": "^0.1.19"
   }
 }

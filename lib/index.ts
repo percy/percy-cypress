@@ -5,9 +5,6 @@ import * as path from 'path'
 declare const Cypress: any
 declare const cy: any
 
-// it will always live in the node_modules path
-const HEALTHCHECK_PATH = 'node_modules/@percy/cypress/dist/percy-healthcheck';
-
 Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   const percyAgentClient = new PercyAgent({ handleAgentCommunication: false })
 
@@ -17,7 +14,7 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
   const healthcheckCmd = `percy health-check -p ${percyAgentClient.port}`
   cy.exec(healthcheckCmd, { failOnNonZeroExit: false }).then(({ stderr }: any) => {
     if (stderr) {
-      // Percy server not available, or we failed to find the healthcheck.
+      // Percy server not available
       cy.log('[percy] Percy agent is not running. Skipping snapshots')
       cy.log(stderr)
 
