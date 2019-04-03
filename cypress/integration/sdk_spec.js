@@ -38,6 +38,12 @@ describe('@percy/cypress', function() {
       cy.get('.todo-count').should('contain', '0 items left')
       cy.percySnapshot('Multiple snapshots #2 -- 1 checked-off todo')
     })
+
+    it('snapshots part of a page', function() {
+      cy.percySnapshot('With a passed domTransformation function', {
+        domTransformation: documentClone => scope(documentClone, 'footer.info')
+      })
+    })
   })
 
   describe('with live sites', function() {
@@ -62,3 +68,11 @@ describe('@percy/cypress', function() {
   })
 
 })
+
+
+function scope(documentClone, selector) {
+  let element = documentClone.querySelector(selector);
+  documentClone.querySelector('body').innerHTML = element.outerHTML;
+
+  return documentClone;
+}

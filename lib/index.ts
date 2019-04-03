@@ -6,7 +6,10 @@ declare const Cypress: any
 declare const cy: any
 
 Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
-  const percyAgentClient = new PercyAgent({ handleAgentCommunication: false })
+  const percyAgentClient = new PercyAgent({
+    handleAgentCommunication: false,
+    domTransformation: options.domTransformation
+  })
 
   // Use cy.exec(...) to check if percy agent is running. Ideally this would be
   // done using something like cy.request(...), but that's not currently possible,
