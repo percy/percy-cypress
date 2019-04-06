@@ -1,6 +1,5 @@
 import {clientInfo, environmentInfo} from './environment'
 import PercyAgent from '@percy/agent'
-import * as path from 'path'
 
 declare const Cypress: any
 declare const cy: any
