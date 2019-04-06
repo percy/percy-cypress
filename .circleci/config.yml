@@ -1,27 +1,38 @@
 version: 2.1
 
-default_steps: &default_steps
+default_test_steps: &default_test_steps
   steps:
     - checkout
     - run: npm ci
     - run: npm test
 
 jobs:
-  node_8:
+  test_node_8:
     docker:
       - image: circleci/node:8-browsers
     environment:
       PERCY_ENABLE: 0
-    <<: *default_steps
-  node_10_with_percy:
+    <<: *default_test_steps
+  test_node_10_with_percy:
     # We've opted this node version to be the one that runs and reports Percy's status
     docker:
       - image: circleci/node:10-browsers
-    <<: *default_steps
+    <<: *default_test_steps
+  release:
+    docker:
+      - image: circleci/node:8
+    steps:
+      - checkout
+      - run: npm ci
+      - run: npx semantic-release
 
 workflows:
-  version: 2
-  test:
+  version: 2.1
+  test_and_release:
     jobs:
-      - node_8
-      - node_10_with_percy
+      - test_node_8
+      - test_node_10_with_percy
+      - release:
+          requires:
+            - test_node_8
+            - test_node_10_with_percy
