@@ -50,7 +50,7 @@ describe('@percy/cypress', function() {
     // The tests in this block require setting '"chromeWebSecurity": false' in cypress.json.
     // For details, see: https://docs.cypress.io/guides/guides/web-security.html#Disabling-Web-Security
 
-    it('snapshots HTTP website', function() {
+    it('snapshots a website with HTTP', function() {
       cy.visit('http://example.com/')
       cy.percySnapshot('http://example.com/')
     })
