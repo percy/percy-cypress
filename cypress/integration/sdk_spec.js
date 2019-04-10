@@ -47,26 +47,19 @@ describe('@percy/cypress', function() {
   })
 
   describe('with live sites', function() {
-
     // The tests in this block require setting '"chromeWebSecurity": false' in cypress.json.
     // For details, see: https://docs.cypress.io/guides/guides/web-security.html#Disabling-Web-Security
 
-    it('snapshots HTTPS website', function() {
-      cy.visit('https://polaris.shopify.com/')
-      cy.percySnapshot('Polaris HTTPS', { widths: [768, 992, 1200] })
+    it('snapshots HTTP website', function() {
+      cy.visit('http://example.com/')
+      cy.percySnapshot('http://example.com/')
     })
 
-    it('snapshots website with strict CSP', function() {
-      cy.visit('https://buildkite.com/')
-      cy.percySnapshot('Buildkite HTTPS + CSP', { widths: [768, 992, 1200] })
-    })
-
-    it('snapshots website with CORS', function() {
-      cy.visit('https://medium.com')
-      cy.percySnapshot('Medium HTTPS + CORS')
+    it('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup', function() {
+      cy.visit('https://sdk-test.percy.dev')
+      cy.percySnapshot('https://sdk-test.percy.dev')
     })
   })
-
 })
 
 
