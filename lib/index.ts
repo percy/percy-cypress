@@ -35,7 +35,7 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
         body: {
           name,
           url: doc.URL,
-          enableJavaScript: options.enableJavaScript,
+          enableJavaScript: (typeof options.enableJavaScript !== 'undefined') ? options.enableJavaScript : true,
           widths: options.widths,
           clientInfo,
           environmentInfo,
