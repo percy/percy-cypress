@@ -23,7 +23,7 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
       return
     }
 
-    name = name || cy.state('runnable').fullTitle()
+    name = name || cy.state('runnable').fullTitle();
 
     (options.document
       ? new Promise(resolve => resolve(options.document))
