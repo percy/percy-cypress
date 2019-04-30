@@ -1,3 +1,10 @@
+## [1.0.7](https://github.com/percy/percy-cypress/compare/v1.0.6...v1.0.7) (2019-04-30)
+
+
+### Bug Fixes
+
+* Open `@percy/agent` version range (tilde over caret) ([#92](https://github.com/percy/percy-cypress/issues/92)) ([0e4b3f9](https://github.com/percy/percy-cypress/commit/0e4b3f9)), closes [/github.com/npm/node-semver#caret-ranges-123-025-004](https://github.com//github.com/npm/node-semver/issues/caret-ranges-123-025-004) [/github.com/npm/node-semver#tilde-ranges-123-12-1](https://github.com//github.com/npm/node-semver/issues/tilde-ranges-123-12-1)
+
 ## [1.0.6](https://github.com/percy/percy-cypress/compare/v1.0.5...v1.0.6) (2019-04-09)
 
 
