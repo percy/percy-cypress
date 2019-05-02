@@ -1,3 +1,10 @@
+## [1.0.8](https://github.com/percy/percy-cypress/compare/v1.0.7...v1.0.8) (2019-05-02)
+
+
+### Bug Fixes
+
+* Properly pass user agent ([#93](https://github.com/percy/percy-cypress/issues/93)) ([9b9f5e6](https://github.com/percy/percy-cypress/commit/9b9f5e6))
+
 ## [1.0.7](https://github.com/percy/percy-cypress/compare/v1.0.6...v1.0.7) (2019-04-30)
 
 
