@@ -37,8 +37,8 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
           url: doc.URL,
           enableJavaScript: options.enableJavaScript,
           widths: options.widths,
-          clientInfo,
-          environmentInfo,
+          clientInfo: clientInfo(),
+          environmentInfo: environmentInfo(),
           domSnapshot
         }
       })
