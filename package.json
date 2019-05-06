@@ -3,7 +3,7 @@
   "version": "1.0.8",
   "description": "Cypress client library for visual regression testing with Percy (https://percy.io).",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "index.d.ts",
   "scripts": {
     "pretest": "npm run build",
     "test": "percy exec -- node run-tests.js",
