@@ -1,3 +1,10 @@
+## [1.0.9](https://github.com/percy/percy-cypress/compare/v1.0.8...v1.0.9) (2019-05-08)
+
+
+### Bug Fixes
+
+* Add TypeScript types. Closes [#89](https://github.com/percy/percy-cypress/issues/89) ([#96](https://github.com/percy/percy-cypress/issues/96)) ([6548bf7](https://github.com/percy/percy-cypress/commit/6548bf7)), closes [/github.com/percy/percy-cypress/pull/96#issuecomment-490487665](https://github.com//github.com/percy/percy-cypress/pull/96/issues/issuecomment-490487665)
+
 ## [1.0.8](https://github.com/percy/percy-cypress/compare/v1.0.7...v1.0.8) (2019-05-02)
 
 
