@@ -14,6 +14,6 @@ declare namespace Cypress {
      *    cy.percySnapshot('home page')
      *    cy.percySnapshot('about page', {widths: [1280, 1960]})
      */
-    percySnapshot(name: string, options?: SnapshotOptions): Chainable<Subject>
+    percySnapshot(name?: string, options?: SnapshotOptions): Chainable<Subject>
   }
 }
