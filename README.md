@@ -9,3 +9,4 @@
 * [Setup and integration docs](https://docs.percy.io/docs/cypress)
 * [Tutorial](https://docs.percy.io/docs/cypress-tutorial)
 * [Example integration](https://github.com/percy/example-percy-cypress)
+* [Example integration with TypeScript](https://github.com/percy/example-percy-cypress-typescript)
