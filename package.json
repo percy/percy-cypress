@@ -44,6 +44,9 @@
     "@percy/agent": "~0",
     "axios": "^0.18.1"
   },
+  "peerDependencies": {
+    "cypress": "^3"
+  },
   "release": {
     "plugins": [
       "@semantic-release/commit-analyzer",
