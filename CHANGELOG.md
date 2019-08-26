@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/percy/percy-cypress/compare/v2.0.0...v2.0.1) (2019-08-26)
+
+
+### Bug Fixes
+
+* pass minHeight option along to agent ([#148](https://github.com/percy/percy-cypress/issues/148)) ([44c2152](https://github.com/percy/percy-cypress/commit/44c2152))
+
 # [2.0.0](https://github.com/percy/percy-cypress/compare/v1.0.9...v2.0.0) (2019-08-02)
 
 
