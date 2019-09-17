@@ -5,14 +5,17 @@
   "main": "dist/index.js",
   "types": "index.d.ts",
   "scripts": {
-    "pretest": "npm run build",
+    "pretest": "yarn build",
     "test": "percy exec -- node run-tests.js",
-    "test:debug": "LOG_LEVEL=debug npm run test",
+    "test:debug": "LOG_LEVEL=debug yarn test",
     "clean": "rm -rf dist/",
-    "build": "npm run clean && tsc",
-    "prepublish": "npm run build",
+    "build": "yarn clean && tsc",
+    "prepublish": "yarn build",
     "lint": "tslint -p . -t stylish --fix",
     "cypress:open": "cypress open"
+  },
+  "resolutions": {
+    "ecstatic": "3.2.2"
   },
   "repository": {
     "type": "git",

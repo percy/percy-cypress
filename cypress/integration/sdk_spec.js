@@ -22,6 +22,12 @@ describe('@percy/cypress', function() {
       cy.percySnapshot('Snapshot with widths', { widths: [768, 992, 1200] })
     })
 
+    it('snapshots with provided name and percyCSS', function() {
+      cy.percySnapshot('Snapshot with percyCSS', {
+        percyCSS: `body { background-color: purple; }`
+      })
+    })
+
     it('snapshots with provided name and minHeight', function() {
       cy.get('.todoapp').should('exist')
       cy.percySnapshot('Snapshot with minHeight', { minHeight: 2000 })
