@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/percy/percy-cypress/compare/v2.0.1...v2.1.0) (2019-09-17)
+
+
+### Features
+
+* Add the ability to pass per-snapshot CSS ([#154](https://github.com/percy/percy-cypress/issues/154)) ([02b976f](https://github.com/percy/percy-cypress/commit/02b976f))
+
 ## [2.0.1](https://github.com/percy/percy-cypress/compare/v2.0.0...v2.0.1) (2019-08-26)
 
 
