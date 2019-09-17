@@ -23,7 +23,7 @@ describe('@percy/cypress', function() {
     })
 
     it('snapshots with provided name and percyCSS', function() {
-      cy.percySnapshot('Snapshot with widths', {
+      cy.percySnapshot('Snapshot with percyCSS', {
         percyCSS: `body { background-color: purple; }`
       })
     })
