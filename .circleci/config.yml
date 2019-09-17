@@ -3,8 +3,8 @@ version: 2.1
 default_test_steps: &default_test_steps
   steps:
     - checkout
-    - run: npm ci
-    - run: npm test
+    - run: yarn
+    - run: yarn test
 
 jobs:
   test_node_8:
@@ -23,7 +23,7 @@ jobs:
       - image: circleci/node:8
     steps:
       - checkout
-      - run: npm ci
+      - run: yarn
       - run: npx semantic-release
 
 workflows:
