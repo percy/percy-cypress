@@ -1,8 +1,9 @@
 
 interface SnapshotOptions {
-  enableJavaScript?: boolean,
   widths?: number[],
+  percyCSS?: string,
   minHeight?: number,
+  enableJavaScript?: boolean,
 }
 
 declare namespace Cypress {
