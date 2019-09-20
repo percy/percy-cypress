@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/percy/percy-cypress/compare/v2.1.0...v2.1.1) (2019-09-20)
+
+
+### Bug Fixes
+
+* add `percyCSS` option to types ([#156](https://github.com/percy/percy-cypress/issues/156)) ([7475783](https://github.com/percy/percy-cypress/commit/7475783))
+
 # [2.1.0](https://github.com/percy/percy-cypress/compare/v2.0.1...v2.1.0) (2019-09-17)
 
 
