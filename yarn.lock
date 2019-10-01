@@ -227,9 +227,9 @@
     universal-user-agent "^4.0.0"
 
 "@percy/agent@~0":
-  version "0.13.0"
-  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.13.0.tgz#eac56b123ea8c0b6116320a9776dead6570c780b"
-  integrity sha512-zX8mmF0nvx+PBHuMB7klTHjbbzffTqjb9xFBwcRjja4M46woLYySZlznBfzqx4w5ET9qGSr4f3mmiFSIEs53Qg==
+  version "0.16.1"
+  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.16.1.tgz#b8f401da25ed90eb2e8410fd4534ca9adb52a716"
+  integrity sha512-XxievLmkxUomZftpJqbgNLrHISNckmaWEzCCqUPv2JJJ26O4exUMPD/t1z4nEEhyz7iWkzMBu1fAcFfzp6nB2Q==
   dependencies:
     "@oclif/command" "1.5.16"
     "@oclif/config" "^1"
@@ -242,8 +242,10 @@
     cross-spawn "^6.0.5"
     deepmerge "^4.0.0"
     express "^4.16.3"
+    follow-redirects "^1.9.0"
     generic-pool "^3.7.1"
     globby "^10.0.1"
+    image-size "^0.8.2"
     js-yaml "^3.13.1"
     percy-client "^3.0.3"
     puppeteer "^1.13.0"
@@ -2039,7 +2041,7 @@ follow-redirects@1.5.10:
   dependencies:
     debug "=3.1.0"
 
-follow-redirects@^1.0.0:
+follow-redirects@^1.0.0, follow-redirects@^1.9.0:
   version "1.9.0"
   resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.9.0.tgz#8d5bcdc65b7108fe1508649c79c12d732dcedb4f"
   integrity sha512-CRcPzsSIbXyVDl0QI01muNDu69S8trU4jArW9LpOt2WtC6LyUJetcIrmfHsRBx7/Jb6GHJUiuqyYxPooFfNt6A==
@@ -2506,6 +2508,13 @@ ignore@^5.1.1:
   version "5.1.4"
   resolved "https://registry.yarnpkg.com/ignore/-/ignore-5.1.4.tgz#84b7b3dbe64552b6ef0eca99f6743dbec6d97adf"
   integrity sha512-MzbUSahkTW1u7JpKKjY7LCARd1fU5W2rLdxlM4kdkayuCwZImjkpluF9CM1aLewYJguPDqewLam18Y6AU69A8A==
+
+image-size@^0.8.2:
+  version "0.8.3"
+  resolved "https://registry.yarnpkg.com/image-size/-/image-size-0.8.3.tgz#f0b568857e034f29baffd37013587f2c0cad8b46"
+  integrity sha512-SMtq1AJ+aqHB45c3FsB4ERK0UCiA2d3H1uq8s+8T0Pf8A3W4teyBQyaFaktH6xvZqh+npwlKU7i4fJo0r7TYTg==
+  dependencies:
+    queue "6.0.1"
 
 import-fresh@^2.0.0:
   version "2.0.0"
@@ -4523,6 +4532,13 @@ querystring@0.2.0:
   version "0.2.0"
   resolved "https://registry.yarnpkg.com/querystring/-/querystring-0.2.0.tgz#b209849203bb25df820da756e747005878521620"
   integrity sha1-sgmEkgO7Jd+CDadW50cAWHhSFiA=
+
+queue@6.0.1:
+  version "6.0.1"
+  resolved "https://registry.yarnpkg.com/queue/-/queue-6.0.1.tgz#abd5a5b0376912f070a25729e0b6a7d565683791"
+  integrity sha512-AJBQabRCCNr9ANq8v77RJEv73DPbn55cdTb+Giq4X0AVnNVZvMHlYp7XlQiN+1npCZj1DuSmaA2hYVUUDgxFDg==
+  dependencies:
+    inherits "~2.0.3"
 
 quick-lru@^1.0.0:
   version "1.1.0"
