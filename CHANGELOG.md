@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/percy/percy-cypress/compare/v2.1.1...v2.2.0) (2019-10-08)
+
+
+### Features
+
+* :sparkles: Add request headers option for asset-discovery ([#159](https://github.com/percy/percy-cypress/issues/159)) ([a595f48](https://github.com/percy/percy-cypress/commit/a595f48))
+
 ## [2.1.1](https://github.com/percy/percy-cypress/compare/v2.1.0...v2.1.1) (2019-09-20)
 
 
