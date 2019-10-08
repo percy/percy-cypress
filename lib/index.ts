@@ -29,6 +29,7 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
             minHeight: options.minHeight,
             clientInfo: clientInfo(),
             percyCSS: options.percyCSS,
+            requestHeaders: options.requestHeaders,
             environmentInfo: environmentInfo(),
             domSnapshot
           }

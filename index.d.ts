@@ -2,6 +2,7 @@
 interface SnapshotOptions {
   widths?: number[],
   percyCSS?: string,
+  requestHeaders?: { (key: string): string },
   minHeight?: number,
   enableJavaScript?: boolean,
 }
