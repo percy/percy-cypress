@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/percy/percy-cypress/compare/v2.2.0...v2.3.0) (2020-02-03)
+
+
+### Features
+
+* Use node v10 ([#190](https://github.com/percy/percy-cypress/issues/190)) ([be177c7](https://github.com/percy/percy-cypress/commit/be177c7))
+
 # [2.2.0](https://github.com/percy/percy-cypress/compare/v2.1.1...v2.2.0) (2019-10-08)
 
 
