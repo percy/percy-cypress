@@ -7,13 +7,13 @@ default_test_steps: &default_test_steps
     - run: yarn test
 
 jobs:
-  test_node_10:
+  test:
     docker:
       - image: circleci/node:10-browsers
     environment:
       PERCY_ENABLE: 0
     <<: *default_test_steps
-  test_node_12_with_percy:
+  percy_test:
     # We've opted this node version to be the one that runs and reports Percy's status
     docker:
       - image: circleci/node:12-browsers
@@ -30,9 +30,9 @@ workflows:
   version: 2.1
   test_and_release:
     jobs:
-      - test_node_10
-      - test_node_12_with_percy
+      - test
+      - percy_test
       - release:
           requires:
-            - test_node_10
-            - test_node_12_with_percy
+            - test
+            - percy_test
