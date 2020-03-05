@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/percy/percy-cypress/compare/v2.3.0...v2.3.1) (2020-03-05)
+
+
+### Bug Fixes
+
+* Update peerDependencies for Cypress v4 ([#198](https://github.com/percy/percy-cypress/issues/198)) ([0502199](https://github.com/percy/percy-cypress/commit/0502199)), closes [#193](https://github.com/percy/percy-cypress/issues/193)
+
 # [2.3.0](https://github.com/percy/percy-cypress/compare/v2.2.0...v2.3.0) (2020-02-03)
 
 
