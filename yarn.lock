@@ -224,9 +224,9 @@
     universal-user-agent "^4.0.0"
 
 "@percy/agent@~0":
-  version "0.23.0"
-  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.23.0.tgz#73bce4ac72d07c83a1cc9a5b5883193248291b9d"
-  integrity sha512-TNsag3omCQ+TFOL/ydoylZvgifsSoQsWwpnIha+6FkQNH6IbuG8/vySx3eBHjNxS1jx9ohRP2699E36KY4lCXA==
+  version "0.26.0"
+  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.26.0.tgz#9f06849d752df7368198835d0b5edc16c2d69a0c"
+  integrity sha512-PKah93vdcmHWlvDd2/QTir4iboqpLAcbAxhUDJYfp8rTzVy5kBstKyPrQk+8IifnGRWNSjsXOO6+qZr+cYHdjA==
   dependencies:
     "@oclif/command" "1.5.19"
     "@oclif/config" "^1"
