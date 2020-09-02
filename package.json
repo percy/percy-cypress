@@ -37,7 +37,7 @@
     "@oclif/tslint": "^3.1.0",
     "@semantic-release/changelog": "^5.0.0",
     "@semantic-release/git": "^9.0.0",
-    "cypress": "^4.1.0",
+    "cypress": "^5.1.0",
     "http-server": "^0.12.0",
     "semantic-release": "^17.0.4",
     "tslint": "^6.0.0",
