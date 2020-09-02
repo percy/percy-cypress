@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@percy/agent": "~0",
-    "axios": "^0.19.0"
+    "axios": "^0.20.0"
   },
   "peerDependencies": {
     "cypress": "^3 || ^4"
