@@ -1,3 +1,10 @@
+## [2.3.2](https://github.com/percy/percy-cypress/compare/v2.3.1...v2.3.2) (2020-09-30)
+
+
+### Bug Fixes
+
+* Add cypress 5 to peerDependencies ([#250](https://github.com/percy/percy-cypress/issues/250)) ([98d982d](https://github.com/percy/percy-cypress/commit/98d982d))
+
 ## [2.3.1](https://github.com/percy/percy-cypress/compare/v2.3.0...v2.3.1) (2020-03-05)
 
 
