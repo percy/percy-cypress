@@ -1,3 +1,10 @@
+## [2.3.3](https://github.com/percy/percy-cypress/compare/v2.3.2...v2.3.3) (2020-12-01)
+
+
+### Bug Fixes
+
+* Upgrade deps for security ([#277](https://github.com/percy/percy-cypress/issues/277)) ([98b06a4](https://github.com/percy/percy-cypress/commit/98b06a4))
+
 ## [2.3.2](https://github.com/percy/percy-cypress/compare/v2.3.1...v2.3.2) (2020-09-30)
 
 
