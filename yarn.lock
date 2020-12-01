@@ -330,9 +330,9 @@
     "@types/node" ">= 8"
 
 "@percy/agent@~0":
-  version "0.28.4"
-  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.28.4.tgz#b6929ee7f6d4900751cfd6b8681558e2994f022e"
-  integrity sha512-Lw5y26opxhVGDCzRJhs3TzT/ia87flsSluYfAVNcDJ7AZCAUakSMzhUZRvMYxU+B/unc1pbfS2i+//Mttjny6Q==
+  version "0.28.5"
+  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.28.5.tgz#6ca7c1d8f86585757b0ad2e13137a3c0cb375eb7"
+  integrity sha512-gGKSS76jlNtRwjmlBlz4JkDP4rh5wBYcfqBYTVFBGf9bjMTrhMv0O9HQDyCa1+KIGkoQC80scES/QSLgamG6YA==
   dependencies:
     "@oclif/command" "1.5.19"
     "@oclif/config" "^1"
