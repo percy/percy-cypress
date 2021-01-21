@@ -45,7 +45,7 @@
     "axios": "^0.21.0"
   },
   "peerDependencies": {
-    "cypress": "^3 || ^4 || ^5"
+    "cypress": "^3 || ^4 || ^5 || ^6"
   },
   "release": {
     "plugins": [
