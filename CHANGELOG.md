@@ -1,3 +1,10 @@
+## [2.3.4](https://github.com/percy/percy-cypress/compare/v2.3.3...v2.3.4) (2021-01-21)
+
+
+### Bug Fixes
+
+* Update Cypress `peerDependency` for Cypress 6 ([#288](https://github.com/percy/percy-cypress/issues/288)) ([6991e44](https://github.com/percy/percy-cypress/commit/6991e44ae73ed756c12d730222f4e917ab07695c))
+
 ## [2.3.3](https://github.com/percy/percy-cypress/compare/v2.3.2...v2.3.3) (2020-12-01)
 
 
