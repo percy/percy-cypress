@@ -341,15 +341,15 @@
     "@types/node" ">= 8"
 
 "@percy/agent@~0":
-  version "0.28.5"
-  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.28.5.tgz#6ca7c1d8f86585757b0ad2e13137a3c0cb375eb7"
-  integrity sha512-gGKSS76jlNtRwjmlBlz4JkDP4rh5wBYcfqBYTVFBGf9bjMTrhMv0O9HQDyCa1+KIGkoQC80scES/QSLgamG6YA==
+  version "0.28.6"
+  resolved "https://registry.yarnpkg.com/@percy/agent/-/agent-0.28.6.tgz#b220fab6ddcf63ae4e6c343108ba6955a772ce1c"
+  integrity sha512-SDAyBiUmfQMVTayjvEjQ0IJIA7Y3AoeyWn0jmUxNOMRRIJWo4lQJghfhFCgzCkhXDCm67NMN2nAQAsvXrlIdkQ==
   dependencies:
     "@oclif/command" "1.5.19"
     "@oclif/config" "^1"
     "@oclif/plugin-help" "^2"
     "@oclif/plugin-not-found" "^1.2"
-    axios "^0.19.0"
+    axios "^0.21.1"
     body-parser "^1.18.3"
     colors "^1.3.2"
     cors "^2.8.4"
@@ -799,14 +799,7 @@ aws4@^1.8.0:
   resolved "https://registry.yarnpkg.com/aws4/-/aws4-1.11.0.tgz#d61f46d83b2519250e2784daf5b09479a8b41c59"
   integrity sha512-xh1Rl34h6Fi1DC2WWKfxUTVqRsNnr6LsKz2+hfwDxQJWmrx8+c7ylaqBMcHfl1U1r2dsifOvKX3LQuLNZ+XSvA==
 
-axios@^0.19.0:
-  version "0.19.2"
-  resolved "https://registry.yarnpkg.com/axios/-/axios-0.19.2.tgz#3ea36c5d8818d0d5f8a8a97a6d36b86cdc00cb27"
-  integrity sha512-fjgm5MvRHLhx+osE2xoekY70AhARk3a6hkN+3Io1jc00jtquGvxYlKlsFUhmUET0V5te6CcZI7lcv2Ym61mjHA==
-  dependencies:
-    follow-redirects "1.5.10"
-
-axios@^0.21.0:
+axios@^0.21.0, axios@^0.21.1:
   version "0.21.1"
   resolved "https://registry.yarnpkg.com/axios/-/axios-0.21.1.tgz#22563481962f4d6bde9a76d516ef0e5d3c09b2b8"
   integrity sha512-dKQiRHxGD9PPRIUNIWvZhPTPpl1rf/OxTYKsqKUDjBwYylTvV7SjSHJb9ratfyzM6wCdLCOYLzs73qpg5c4iGA==
@@ -1645,7 +1638,7 @@ debug@2.6.9, debug@^2.6.9:
   dependencies:
     ms "2.0.0"
 
-debug@3.1.0, debug@=3.1.0:
+debug@3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/debug/-/debug-3.1.0.tgz#5bb5a0672628b64149566ba16819e61518c67261"
   integrity sha512-OX8XqP7/1a9cqkxYw2yXss15f26NKWBpDXQd0/uK/KPqdQhxbPa994hnzjcE2VqQpDslf55723cKPUOGSmMY3g==
@@ -2328,13 +2321,6 @@ follow-redirects@1.12.1:
   version "1.12.1"
   resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.12.1.tgz#de54a6205311b93d60398ebc01cf7015682312b6"
   integrity sha512-tmRv0AVuR7ZyouUHLeNSiO6pqulF7dYa3s19c6t+wz9LD69/uSzdMxJ2S91nTI9U3rt/IldxpzMOFejp6f0hjg==
-
-follow-redirects@1.5.10:
-  version "1.5.10"
-  resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.5.10.tgz#7b7a9f9aea2fdff36786a94ff643ed07f4ff5e2a"
-  integrity sha512-0V5l4Cizzvqt5D44aTXbFZz+FtyXV1vrDN6qrelxtfYQKW0KO0W2T/hkE8xvGa/540LkZlkaUjO4ailYTFtHVQ==
-  dependencies:
-    debug "=3.1.0"
 
 follow-redirects@^1.0.0, follow-redirects@^1.10.0:
   version "1.13.0"
