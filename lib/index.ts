@@ -14,7 +14,10 @@ Cypress.Commands.add('percySnapshot', (name: string, options: any = {}) => {
 
       name = name || cy.state('runnable').fullTitle()
 
-      cy.document().then((doc: Document) => {
+      (options.document
+        ? new Promise(resolve => resolve(options.document))
+        : cy.document()
+      ).then((doc: Document) => {
         options.document = doc
         const domSnapshot = percyAgentClient.snapshot(name, options)
         return cy.request({
