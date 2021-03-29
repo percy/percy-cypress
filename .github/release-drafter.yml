@@ -1,0 +1,31 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '💥 Breaking Changes'
+    labels:
+      - breaking
+  - title: '✨ Enhancements'
+    labels:
+      - feature
+      - enhancement
+  - title: '🐛 Bug Fixes'
+    labels:
+      - fix
+      - bugfix
+      - bug
+  - title: '🏗  Maintenance'
+    labels:
+      - chore
+      - dependencies
+change-title-escapes: '\<*_&#@'
+version-resolver:
+  major:
+    labels:
+      - breaking
+  minor:
+    labels:
+      - feature
+      - enhancement
+  default: patch
+template: '$CHANGES'
+prerelease: true

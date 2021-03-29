@@ -1,3 +1,4 @@
-node_modules/
-dist/
-cypress/screenshots
+node_modules
+.nyc_output
+coverage
+cypress/fixtures
