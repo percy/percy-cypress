@@ -7,7 +7,7 @@
 ## Installation
 
 ```sh-session
-$ npm install --save-dev @percy/cli @percy/cypress@next
+$ npm install --save-dev @percy/cli @percy/cypress
 ```
 
 Then add to your `cypress/support/index.js` file
