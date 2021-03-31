@@ -20,6 +20,6 @@ jobs:
           key: v1/${{ runner.os }}/node-12/${{ hashFiles('**/yarn.lock') }}
           restore-keys: v1/${{ runner.os }}/node-12/
       - run: yarn
-      - run: npm publish --tag next
+      - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
