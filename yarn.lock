@@ -956,11 +956,11 @@
   integrity sha512-6mDHvIQ8wJCN7dd9bnnKtT/VrE+HBTB+U9C7a7vSakC35DnY4QrxH1sbK4hAO8wc2aw6YR3vepX2w/ZYpeuqnA==
 
 "@percy/sdk-utils@^1.0.0-beta.44":
-  version "1.0.0-beta.44"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.44.tgz#acb76688bcfecfe53a44c2f5d3f86eea938630fa"
-  integrity sha512-iV0MNceYhROeIVKbHwbVgKFyEf/A+XmianA82v+IXBD5tawn9YfqKg5H5GjiaXhjLDYKwiYAMcM0X20njqKDcg==
+  version "1.0.0-beta.47"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.47.tgz#8a63f918402e87cb91c6cfa7855231cd5014a831"
+  integrity sha512-DxenREZfNv7iai4/H1KZq5m3/cd3zgoRJ3EUiO7b80lZKORydYFzZMYD0WbivK0C3cosEy3j/rhik6Q5Anq09g==
   dependencies:
-    "@percy/logger" "^1.0.0-beta.44"
+    "@percy/logger" "^1.0.0-beta.47"
 
 "@samverschueren/stream-to-observable@^0.3.0":
   version "0.3.0"
