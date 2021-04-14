@@ -32,6 +32,14 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
   name = name || cy.state('runnable').fullTitle();
 
   cy.then(async () => {
+    if (Cypress.config('isInteractive') &&
+        !Cypress.config('enablePercyInteractiveMode')) {
+      return cylog('Disabled in interactive mode', {
+        details: 'use "cypress run" instead of "cypress open"',
+        name
+      });
+    }
+
     // Check if Percy is enabled
     if (!await utils.isPercyEnabled()) {
       return cylog('Not running', { name });
