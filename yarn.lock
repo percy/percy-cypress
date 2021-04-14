@@ -950,7 +950,7 @@
   dependencies:
     dotenv "^8.2.0"
 
-"@percy/logger@^1.0.0-beta.44", "@percy/logger@^1.0.0-beta.47":
+"@percy/logger@^1.0.0-beta.47":
   version "1.0.0-beta.47"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.47.tgz#72d91b693b43c59f1cccffdfafec70adc9ffc1a8"
   integrity sha512-6mDHvIQ8wJCN7dd9bnnKtT/VrE+HBTB+U9C7a7vSakC35DnY4QrxH1sbK4hAO8wc2aw6YR3vepX2w/ZYpeuqnA==

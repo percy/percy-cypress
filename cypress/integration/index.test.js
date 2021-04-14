@@ -65,4 +65,31 @@ describe('percySnapshot', () => {
       '[percy] Error: 500 Internal Server Error'
     ]);
   });
+
+  describe('in interactive mode', () => {
+    let ogInteractive;
+
+    beforeEach(() => {
+      ogInteractive = Cypress.config('isInteractive');
+    });
+
+    afterEach(() => {
+      Cypress.config('isInteractive', ogInteractive);
+    });
+
+    it('disables snapshots', () => {
+      Cypress.config('isInteractive', true);
+      cy.percySnapshot('Snapshot name');
+
+      cy.get('@log').should((spy) => {
+        expect(spy).to.be.calledWith(
+          match({
+            name: 'percySnapshot',
+            displayName: 'percy',
+            message: 'Disabled in interactive mode'
+          })
+        );
+      });
+    });
+  });
 });
