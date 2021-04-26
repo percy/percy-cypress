@@ -950,7 +950,7 @@
   dependencies:
     dotenv "^8.2.0"
 
-"@percy/logger@^1.0.0-beta.47", "@percy/logger@^1.0.0-beta.48":
+"@percy/logger@^1.0.0-beta.48":
   version "1.0.0-beta.48"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.48.tgz#c8323536038d0ac5f05080a36f7dbc3319b139c9"
   integrity sha512-vO70hgMuRssqFAcI3x3zyRLHqXYNtaaBKoaoXMpt4XF0W7At7AxFPOttvkzAI1gP7mqNwUZtc2K8VPkcguR7Aw==
@@ -1073,17 +1073,7 @@ ajv@^6.10.0, ajv@^6.12.3, ajv@^6.12.4:
     json-schema-traverse "^0.4.1"
     uri-js "^4.2.2"
 
-ajv@^8.0.1:
-  version "8.0.1"
-  resolved "https://registry.yarnpkg.com/ajv/-/ajv-8.0.1.tgz#dac101898a87f8ebb57fea69617e8096523c628c"
-  integrity sha512-46ZA4TalFcLLqX1dEU3dhdY38wAtDydJ4e7QQTVekLUTzXkb1LfqU6VOBXC/a9wiv4T094WURqJH6ZitF92Kqw==
-  dependencies:
-    fast-deep-equal "^3.1.1"
-    json-schema-traverse "^1.0.0"
-    require-from-string "^2.0.2"
-    uri-js "^4.2.2"
-
-ajv@^8.0.5:
+ajv@^8.0.1, ajv@^8.0.5:
   version "8.1.0"
   resolved "https://registry.yarnpkg.com/ajv/-/ajv-8.1.0.tgz#45d5d3d36c7cdd808930cc3e603cf6200dbeb736"
   integrity sha512-B/Sk2Ix7A36fs/ZkuGLIR86EdjbgR6fsAcbx9lOP/QBSXujDNbVmIS/U4Itz5k8fPFDeVZl/zQ/gJW4Jrq6XjQ==
@@ -2720,9 +2710,9 @@ eslint-visitor-keys@^2.0.0:
   integrity sha512-QudtT6av5WXels9WjIM7qz1XD1cWGvX4gGXvp/zBn9nXG02D0utdU3Em2m/QjTnrsk6bBjmCygl3rmj118msQQ==
 
 eslint@^7.22.0:
-  version "7.24.0"
-  resolved "https://registry.yarnpkg.com/eslint/-/eslint-7.24.0.tgz#2e44fa62d93892bfdb100521f17345ba54b8513a"
-  integrity sha512-k9gaHeHiFmGCDQ2rEfvULlSLruz6tgfA8DEn+rY9/oYPFFTlz55mM/Q/Rij1b2Y42jwZiK3lXvNTw6w6TXzcKQ==
+  version "7.25.0"
+  resolved "https://registry.yarnpkg.com/eslint/-/eslint-7.25.0.tgz#1309e4404d94e676e3e831b3a3ad2b050031eb67"
+  integrity sha512-TVpSovpvCNpLURIScDRB6g5CYu/ZFq9GfX2hLNIV4dSBKxIWojeDODvYl3t0k0VtMxYeR8OXPCFE5+oHMlGfhw==
   dependencies:
     "@babel/code-frame" "7.12.11"
     "@eslint/eslintrc" "^0.4.0"
