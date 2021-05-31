@@ -797,13 +797,13 @@
     watchify "3.11.1"
 
 "@cypress/code-coverage@^3.8.1":
-  version "3.9.5"
-  resolved "https://registry.yarnpkg.com/@cypress/code-coverage/-/code-coverage-3.9.5.tgz#28fbd00c716f28aada5467c170008fe0c21b70d6"
-  integrity sha512-hdABt7EWvLHyfxwrrJkK4gWjBcEE+aTTHm5VgSkHjeIoE9G4rZtS4Zesa9PYbm9r2e7FPYA+ROPER9oMgRKDQg==
+  version "3.9.6"
+  resolved "https://registry.yarnpkg.com/@cypress/code-coverage/-/code-coverage-3.9.6.tgz#b9fc90f43edbdda1e73c8a2ba8e0846696ed2de9"
+  integrity sha512-rp7+DfUcwZE6Q9gmEC9d/1g3aUiYMdDXRwhCqloNuVHPWnZQ4Waluf2q8kTmc7Vzwx6s/MmsdpyitDsIWKmdGw==
   dependencies:
     "@cypress/browserify-preprocessor" "3.0.1"
     chalk "4.1.1"
-    dayjs "1.10.4"
+    dayjs "1.10.5"
     debug "4.3.1"
     execa "4.1.0"
     globby "11.0.3"
@@ -951,17 +951,17 @@
   dependencies:
     dotenv "^9.0.2"
 
-"@percy/logger@^1.0.0-beta.50":
-  version "1.0.0-beta.50"
-  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.50.tgz#3da11c97afd9e8a536571b06e2ac8d3300963178"
-  integrity sha512-F+8ejYB5C3iOwLQAIPYzkT1gtyA9B6q4WaDEH6yRokXk6YktXM2O+91qU6v1Y5mdxw26+F4QUX42Gqu7ocBQXg==
+"@percy/logger@^1.0.0-beta.50", "@percy/logger@^1.0.0-beta.52":
+  version "1.0.0-beta.52"
+  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.52.tgz#d040d216c68436fc332cad6dfe4e3ae4da10e807"
+  integrity sha512-R7puXEaA1xQM2EWS7wXrWhgLTKre73pmDoY7fyAljHFYdP2IblMVOmT4eUw2D7PS5B5MDS158cYMOT2BjrPTIw==
 
 "@percy/sdk-utils@^1.0.0-beta.44":
-  version "1.0.0-beta.50"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.50.tgz#24f0752827b0d62bbf2a2e4fb58e507180b455fe"
-  integrity sha512-y5jVJYB0DggpyErhFl4Wq407PGPTWYpzjQSziMXO5HodFaUFSavpT+lyDM78uacPd3vBQ4xj7BEAE40uA5UmGg==
+  version "1.0.0-beta.52"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.52.tgz#e761cc8fd39d3bd05f7d80eefa3c74447ec196c7"
+  integrity sha512-NLLYeXqFMOqlJpmOSpnhRacz5asJAeGq83PZoV2KI72DonXDrGtf+j173OGwcg6FUFuk0hLsbB3IWKHJyed+Rw==
   dependencies:
-    "@percy/logger" "^1.0.0-beta.50"
+    "@percy/logger" "^1.0.0-beta.52"
 
 "@samverschueren/stream-to-observable@^0.3.0":
   version "0.3.0"
@@ -2241,10 +2241,10 @@ date-fns@^1.27.2:
   resolved "https://registry.yarnpkg.com/date-fns/-/date-fns-1.30.1.tgz#2e71bf0b119153dbb4cc4e88d9ea5acfb50dc05c"
   integrity sha512-hBSVCvSmWC+QypYObzwGOd9wqdDpOt+0wl0KbU+R+uuZBS1jN8VsD1ss3irQDknRj5NvxiTF6oj/nDRnN/UQNw==
 
-dayjs@1.10.4, dayjs@^1.10.4:
-  version "1.10.4"
-  resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.10.4.tgz#8e544a9b8683f61783f570980a8a80eaf54ab1e2"
-  integrity sha512-RI/Hh4kqRc1UKLOAf/T5zdMMX5DQIlDxwUe3wSyMMnEbGunnpENCdbUgM+dW7kXidZqCttBrmw7BhN4TMddkCw==
+dayjs@1.10.5, dayjs@^1.10.4:
+  version "1.10.5"
+  resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.10.5.tgz#5600df4548fc2453b3f163ebb2abbe965ccfb986"
+  integrity sha512-BUFis41ikLz+65iH6LHQCDm4YPMj5r1YFLdupPIyM4SGcXMmtiLQ7U37i+hGS8urIuqe7I/ou3IS1jVc4nbN4g==
 
 debug@4.1.1:
   version "4.1.1"
