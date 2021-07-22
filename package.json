@@ -1,7 +1,7 @@
 {
   "name": "@percy/cypress",
   "description": "Cypress client library for visual testing with Percy",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "license": "MIT",
   "author": "Perceptual Inc.",
   "repository": "https://github.com/percy/percy-cypress",
