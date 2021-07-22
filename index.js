@@ -4,6 +4,9 @@ const utils = require('@percy/sdk-utils');
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
+// asset discovery should timeout before this
+// 1.5 times the 30 second nav timeout
+const CY_TIMEOUT = 30 * 1000 * 1.5;
 
 // Maybe set the CLI API address from the environment
 utils.percy.address = Cypress.env('PERCY_SERVER_ADDRESS');
@@ -31,7 +34,7 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
   // Default name to test title
   name = name || cy.state('runnable').fullTitle();
 
-  cy.then(async () => {
+  return cy.then({ timeout: CY_TIMEOUT }, async () => {
     if (Cypress.config('isInteractive') &&
         !Cypress.config('enablePercyInteractiveMode')) {
       return cylog('Disabled in interactive mode', {
@@ -52,7 +55,7 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
     }
 
     // Serialize and capture the DOM
-    return cy.document({ log: false }).then(dom => {
+    return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, dom => {
       let domSnapshot = window.PercyDOM.serialize({ ...options, dom });
 
       // Post the DOM snapshot to Percy
