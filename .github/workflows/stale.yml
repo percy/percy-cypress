@@ -1,0 +1,30 @@
+name: 'Close stale issues and PRs'
+on:
+  schedule:
+    - cron: '0 19 * * 2'
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v4
+        with:
+          stale-issue-message: >-
+            This issue is stale because it has been open for more than 14 days with no activity.
+            Remove stale label or comment or this will be closed in 14 days.
+          stale-pr-message: >-
+            This PR is stale because it has been open for more than 14 days with no activity.
+            Remove stale label or comment or this will be closed in 14 days.
+          close-issue-message: >-
+            This issue was closed because it has been stalled for 28 days with no activity.
+          close-pr-message: >-
+            This PR was closed because it has been stalled for 28 days with no activity.
+          days-before-issue-stale: 14
+          days-before-pr-stale: 14
+          # close 14 days _after_ initial warning
+          days-before-issue-close: 14
+          days-before-pr-close: 14
+          exempt-pr-labels: '❄️ on ice'
+          exempt-issue-labels: '🐛 bug,❄️ on ice,✨ enhancement'
+          exempt-all-assignees: true
+          stale-pr-label: '🍞 stale'
