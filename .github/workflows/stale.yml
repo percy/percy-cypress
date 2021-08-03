@@ -28,3 +28,4 @@ jobs:
           exempt-issue-labels: '🐛 bug,❄️ on ice,✨ enhancement'
           exempt-all-assignees: true
           stale-pr-label: '🍞 stale'
+          stale-issue-label: '🍞 stale'
