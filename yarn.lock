@@ -953,11 +953,6 @@
   resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.0.0-beta.65.tgz#f001ec31bca634af9231d6a6e75bf2a7f4123aca"
   integrity sha512-wC31lLHyvBBwTWXUnTEm1DEWp6eH1Gwk6iLlzYaX4XMKA9Fjab99eNzBGK8CKPrI4K1LzmhrlvyUv9KXfpMofA==
 
-"@percy/logger@1.0.0-beta.63":
-  version "1.0.0-beta.63"
-  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.63.tgz#81d4b2747859d9fdc1f2a6c06e50eddda1b9a2b1"
-  integrity sha512-iumIt1JjrZQiD9fPShbqaUtyqgRBA1crJzwhh6MPZz4s0XJLxcEzhawKzqhtOoiB8Wr5AxVygswLOkTfPcVuFg==
-
 "@percy/logger@1.0.0-beta.65":
   version "1.0.0-beta.65"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.65.tgz#30a34797c935003334124e970f62914b0d124968"
@@ -2044,9 +2039,9 @@ crypto-browserify@^3.0.0:
     randomfill "^1.0.3"
 
 cypress@^8.0.0:
-  version "8.2.0"
-  resolved "https://registry.yarnpkg.com/cypress/-/cypress-8.2.0.tgz#1e4e9f6218324e82a95c1b9cad7f3965ba663d7f"
-  integrity sha512-jg7S5VxxslwsgEyAkCE9ZCkFADxOUY1bSWScp1cWnga88K0TZgFQ0zdxyG9Mw/4spLGuvkriIZ62am+TR6C04w==
+  version "8.3.0"
+  resolved "https://registry.yarnpkg.com/cypress/-/cypress-8.3.0.tgz#ba906d2170888073ad94b2be1b994a749bbb7c7d"
+  integrity sha512-zA5Rcq8AZIfRfPXU0CCcauofF+YpaU9HYbfqkunFTmFV0Kdlo14tNjH2E3++MkjXKFnv3/pXq+HgxWtw8CSe8Q==
   dependencies:
     "@cypress/request" "^2.88.5"
     "@cypress/xvfb" "^1.2.4"
