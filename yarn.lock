@@ -964,11 +964,11 @@
   integrity sha512-I8CQfHn9eL7TSvxXedS7g22A1aGjhBeUJv2k65W4yBxLCJXalXNObWgYMs6dZn/AbISbssebzk6bbsbiC5sCuA==
 
 "@percy/sdk-utils@^1.0.0-beta.44":
-  version "1.0.0-beta.65"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.65.tgz#bbb17b3d60c25acba2cf07d68bc5ba99819ef22c"
-  integrity sha512-6Tup8LiCHU5cYDoQ9rTwnw3HbFfkoEbsH4PbU96hvsUmagBhaOEis8JjubW3Nd54ZNNhcXFRc4H/tQ6ID0qKcw==
+  version "1.0.0-beta.67"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.67.tgz#19b0e2ef6363efaff1a888ea06a2974743eaba28"
+  integrity sha512-FEj9aRZi/cOE0ked9ziAsDAjw+DgcHr3jcQcOZnMENZUpyX9HE+42Xmfpu5cUwiLOQ39s5krbUSUjWwryrt+cQ==
   dependencies:
-    "@percy/logger" "1.0.0-beta.65"
+    "@percy/logger" "1.0.0-beta.67"
 
 "@tsd/typescript@~4.3.2":
   version "4.3.2"
