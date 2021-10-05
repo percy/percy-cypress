@@ -5,7 +5,14 @@ title: ''
 labels: ''
 assignees: ''
 ---
+
 <!--
+## Have you read the "Debugging SDKs" doc yet?
+
+There are common setup gotchas that happen with Percy's SDKs, it would be worth reading
+the debugging document, which might already answer your question:
+https://docs.percy.io/docs/debugging-sdk
+
 ## Reach out to Percy support instead?
 
 If you’re having issues that _aren’t SDK bugs_, it would be best for you to
@@ -35,10 +42,11 @@ If necessary, describe the problem you have been experiencing in more detail.
 
 ## Debug logs
 
-If you are reporting a bug, _always_ include logs! Run a Percy build with
-`--verbose` to get the full debug logs. You can also set an environment var
-`PERCY_LOGLEVEL=debug` to get debug logs. For example, `percy exec --verbose --
-[test command]`.  Please include the full complete test output.
+If you are reporting a bug, _always_ include logs! [Give the "Debugging SDKs"
+document a quick read for how to gather logs](https://docs.percy.io/docs/debugging-sdks#debugging-sdks)
+
+Please do not trim or edit these logs, often times there are hints in the full
+logs that help debug what is going on.
 
 ## Code to reproduce issue
 
