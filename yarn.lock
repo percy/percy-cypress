@@ -1155,12 +1155,17 @@
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.70.tgz#1fe0a234ea1d249c3e3667870a31d59de56bf78a"
   integrity sha512-QUVdp/FEsoHYftakuxe67/e/OVeVX6d2Fgur+thhqgHZ5GD87TwFsB+PH8kP6b5/ZZ+bOysT6bbxbiDvGEqWwg==
 
+"@percy/logger@1.0.0-beta.71":
+  version "1.0.0-beta.71"
+  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.71.tgz#03b458b1e43506c08c062f11b46aa2c9b1826fbf"
+  integrity sha512-09MgfGbvSFgvmQ1g0AkPnRwfkJvXluj7TLVlcgBsKEdo0cKfmctvXUtRBgiueqJFSb7jF+JwzE5i17bHnLy0ng==
+
 "@percy/sdk-utils@^1.0.0-beta.44":
-  version "1.0.0-beta.70"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.70.tgz#6a0f65fc338a2eb76eb85646deb650a64d65876c"
-  integrity sha512-kxdMpvVnj4GUUhEYQ9j+qWUm1SJXkeqhcpbxrrfmE9wFpw2TgKWUTOwLS6im68cY6A03P9F4UAGSNWnE0ZHneA==
+  version "1.0.0-beta.71"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.0.0-beta.71.tgz#29c6e0e9b1d81546d51bf1976383dd9e058300a6"
+  integrity sha512-PV576xwd7mBeCQjEOHT6ij1EpInEmXhz/JN3Vi2gGhDpdcjGVKkfYXXDDDz4CMsYcDrl4EtPvNtWCaGxsivzCA==
   dependencies:
-    "@percy/logger" "1.0.0-beta.70"
+    "@percy/logger" "1.0.0-beta.71"
 
 "@tsd/typescript@~4.5.2":
   version "4.5.2"
