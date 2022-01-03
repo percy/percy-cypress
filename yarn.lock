@@ -1564,11 +1564,6 @@
   resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.0.0-beta.71.tgz#bbe89285817f9a578c3cdfc0d1ee74c5b3d768c7"
   integrity sha512-DPiCL2xuAdaTghziP2XtmaSMp1t3Mb0oo3yEg2HOpTjaPqu/tX9LjI+cJOs2jKf/jIwC3ris3agcafceXiGWZw==
 
-"@percy/logger@1.0.0-beta.70":
-  version "1.0.0-beta.70"
-  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.70.tgz#1fe0a234ea1d249c3e3667870a31d59de56bf78a"
-  integrity sha512-QUVdp/FEsoHYftakuxe67/e/OVeVX6d2Fgur+thhqgHZ5GD87TwFsB+PH8kP6b5/ZZ+bOysT6bbxbiDvGEqWwg==
-
 "@percy/logger@1.0.0-beta.71":
   version "1.0.0-beta.71"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.71.tgz#03b458b1e43506c08c062f11b46aa2c9b1826fbf"
@@ -5502,9 +5497,9 @@ tsconfig-paths@^3.11.0:
     strip-bom "^3.0.0"
 
 tsd@^0.19.0:
-  version "0.19.0"
-  resolved "https://registry.yarnpkg.com/tsd/-/tsd-0.19.0.tgz#0198e583bfc0be6f38b24cd5078278eb1de38f23"
-  integrity sha512-DlYCjjRVspfSAC+9X1NUDqPj0PtsVjUSyC4/OJpCGnY2Mtg0ddc+opckmnLV3RhUBpVuAAOrz661v+QSJwINkQ==
+  version "0.19.1"
+  resolved "https://registry.yarnpkg.com/tsd/-/tsd-0.19.1.tgz#c37891ad907d6ce2122e4a20c99cceca5767d713"
+  integrity sha512-pSwchclr+ADdxlahRUQXUrdAIOjXx1T1PQV+fLfVLuo/S4z+T00YU84fH8iPlZxyA2pWgJjo42BG1p9SDb4NOw==
   dependencies:
     "@tsd/typescript" "~4.5.2"
     eslint-formatter-pretty "^4.1.0"
