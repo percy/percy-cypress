@@ -74,11 +74,11 @@ describe('percySnapshot', () => {
     });
 
     afterEach(() => {
-      Cypress.config('isInteractive', ogInteractive);
+      Cypress.config().isInteractive = ogInteractive;
     });
 
     it('disables snapshots', () => {
-      Cypress.config('isInteractive', true);
+      Cypress.config().isInteractive = true;
       cy.percySnapshot('Snapshot name');
 
       cy.get('@log').should((spy) => {
