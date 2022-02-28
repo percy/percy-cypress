@@ -1522,52 +1522,60 @@
     "@nodelib/fs.scandir" "2.1.3"
     fastq "^1.6.0"
 
-"@percy/client@1.0.0-beta.75":
-  version "1.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@percy/client/-/client-1.0.0-beta.75.tgz#561734472ab0acfb66bfea71345a0c51bb71fa36"
-  integrity sha512-QHyTQOBLj8iEminAUaIS8QV7CpGdKp6RwHLCTIHaUCGprzU+FZ8+/hhlHVbWwx0EYqeK2DrWr5ruEDdHC9C4oQ==
+"@percy/client@1.0.0-beta.76":
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/client/-/client-1.0.0-beta.76.tgz#cc0438ec1a2129bf41e75c33e2d1a2f91d434704"
+  integrity sha512-vq0npya/YobIwbqrhiCXF7liwHJNmMEiAkefv5AXLmhCxIJ9eWjvgYew4xssuf+QPHfdv10EVa5kkMSr8INxeA==
   dependencies:
-    "@percy/env" "1.0.0-beta.75"
-    "@percy/logger" "1.0.0-beta.75"
+    "@percy/env" "1.0.0-beta.76"
+    "@percy/logger" "1.0.0-beta.76"
 
-"@percy/config@1.0.0-beta.75":
-  version "1.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@percy/config/-/config-1.0.0-beta.75.tgz#e86596349f15e881c8a7dbd6e090c3a80bbab686"
-  integrity sha512-UcbMCYlp0NpQcUJo7X6Vwo67OVa/l0XEG00OwOE+XF/aB083Zo4usXO7rRBdn3UuJ4zj5/mqpK/+hiSMdK8PPg==
+"@percy/config@1.0.0-beta.76":
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/config/-/config-1.0.0-beta.76.tgz#71b0f8df28053769c964acae461bfd8b705a674d"
+  integrity sha512-e3sLzcrVlsax5q1RwO8sek2Qjqb617WFpa1+wnXqPSMSxiEBlr+lbUC/C5a1hHKEWdFz4RKSJC+2mjhT8ylm3g==
   dependencies:
-    "@percy/logger" "1.0.0-beta.75"
+    "@percy/logger" "1.0.0-beta.76"
     ajv "^8.6.2"
     cosmiconfig "^7.0.0"
     yaml "^1.10.0"
 
 "@percy/core@^1.0.0-beta.44":
-  version "1.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@percy/core/-/core-1.0.0-beta.75.tgz#a6b07da3f493d9dcd80431f83c5718362c7fe8cd"
-  integrity sha512-VyaMT6DgOTvqRt55SeVXnCAyX1+4AAqzwHPWksFHPdmtuwpOw7ptDucX/503RTk6KNHsauZ1IxqPipb0fJkKJw==
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/core/-/core-1.0.0-beta.76.tgz#7bca4b744c782e9dd8f9097b6af1c676b3eb7fbf"
+  integrity sha512-sTtwdNBmhX/IvKrNGT3TWrZ0ngJZ2Kh6Y4m9M9H4pciGHmiSFcMqsBB0tK6IMbfIsGqFz8ePOTj++4RLSMlK/g==
   dependencies:
-    "@percy/client" "1.0.0-beta.75"
-    "@percy/config" "1.0.0-beta.75"
-    "@percy/dom" "1.0.0-beta.75"
-    "@percy/logger" "1.0.0-beta.75"
+    "@percy/client" "1.0.0-beta.76"
+    "@percy/config" "1.0.0-beta.76"
+    "@percy/dom" "1.0.0-beta.76"
+    "@percy/logger" "1.0.0-beta.76"
+    content-disposition "^0.5.4"
     cross-spawn "^7.0.3"
     extract-zip "^2.0.1"
+    mime-types "^2.1.34"
+    path-to-regexp "^6.2.0"
     rimraf "^3.0.2"
     ws "^8.0.0"
 
-"@percy/dom@1.0.0-beta.75":
-  version "1.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@percy/dom/-/dom-1.0.0-beta.75.tgz#6f368d385acef68e17423993548b9d67e79f19d1"
-  integrity sha512-H+H8141JTTUGHh2w/VslK2Z4UxgH8YWkKTxJ3VPoqbmXoke+jbqdxW++Qe7RFe5gCJAD7u2LvcCNtYvUTckbRQ==
+"@percy/dom@1.0.0-beta.76":
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/dom/-/dom-1.0.0-beta.76.tgz#ca0e5f639db271eda4f0826af57a25e1b62bd023"
+  integrity sha512-9v/yXjIe2UhAkjnO2pWT0Ki4rzgIl0Z6YyWcn1b5NfsBcMm99Hcse+otDsQJF8z0MkU4ZykiPY63zmjs45wChQ==
 
-"@percy/env@1.0.0-beta.75":
-  version "1.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.0.0-beta.75.tgz#70ed039968cfb393ab23068fe978f4724d2c5490"
-  integrity sha512-hu23XMUdkhnSug9XiUgnO9ktzauqE1b+hBwpy/NPR0laFVE1e/v7qJhh8z298L2itisYoNcIBMyej1M7XsM7FQ==
+"@percy/env@1.0.0-beta.76":
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.0.0-beta.76.tgz#079f3a1174717d8da15e7e0575ff821fdf035aa5"
+  integrity sha512-+Mx9K3wjFriMT0cMD5l+VRo6mhQ/XssKy77SUeWrOaGIk7Xs/FsnDUpLOCXAGUeJr1AznZM76ng99IOBM6pY4w==
 
 "@percy/logger@1.0.0-beta.75":
   version "1.0.0-beta.75"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.75.tgz#7217f9b792ef09eb6fbce41be93b7fd6ad7cd827"
   integrity sha512-/0otHJcPUAiJwOzyFwwlolp2lGz2Bx11rHy27kUYZpzMoA6mx/9uY6q2rfhuG8/dWbkgAt1Upc7fuMkaGK4P0g==
+
+"@percy/logger@1.0.0-beta.76":
+  version "1.0.0-beta.76"
+  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.76.tgz#1a75c583670acc078389a43d8b7410fd655c0b92"
+  integrity sha512-v5zIMNv1xqdcWBAOK5A6ZEO99ZBwzWS3phLEfkKbIlGIUxvjkJHSfZv/k1dnt2RRfpDNkM6X5pMg2yI8j1+d+g==
 
 "@percy/sdk-utils@^1.0.0-beta.44":
   version "1.0.0-beta.75"
@@ -2501,6 +2509,13 @@ constants-browserify@~1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/constants-browserify/-/constants-browserify-1.0.0.tgz#c20b96d8c617748aaf1c16021760cd27fcb8cb75"
   integrity sha1-wguW2MYXdIqvHBYCF2DNJ/y4y3U=
+
+content-disposition@^0.5.4:
+  version "0.5.4"
+  resolved "https://registry.yarnpkg.com/content-disposition/-/content-disposition-0.5.4.tgz#8b82b4efac82512a02bb0b1dcec9d2c5e8eb5bfe"
+  integrity sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==
+  dependencies:
+    safe-buffer "5.2.1"
 
 convert-source-map@^1.3.0, convert-source-map@^1.7.0:
   version "1.7.0"
@@ -4276,17 +4291,17 @@ miller-rabin@^4.0.0:
     bn.js "^4.0.0"
     brorand "^1.0.1"
 
-mime-db@1.44.0:
-  version "1.44.0"
-  resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.44.0.tgz#fa11c5eb0aca1334b4233cb4d52f10c5a6272f92"
-  integrity sha512-/NOTfLrsPBVeH7YtFPgsVWveuL+4SjjYxaQ1xtM1KMFj7HdxlBlxeyNLzhyJVx7r4rZGJAZ/6lkKCitSc/Nmpg==
+mime-db@1.51.0:
+  version "1.51.0"
+  resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.51.0.tgz#d9ff62451859b18342d960850dc3cfb77e63fb0c"
+  integrity sha512-5y8A56jg7XVQx2mbv1lu49NR4dokRnhZYTtL+KGfaa27uq4pSTXkwQkFJl4pkRMyNFz/EtYDSkiiEHx3F7UN6g==
 
-mime-types@^2.1.12, mime-types@~2.1.19:
-  version "2.1.27"
-  resolved "https://registry.yarnpkg.com/mime-types/-/mime-types-2.1.27.tgz#47949f98e279ea53119f5722e0f34e529bec009f"
-  integrity sha512-JIhqnCasI9yD+SsmkquHBxTSEuZdQX5BuQnS2Vc7puQQQ+8yiP5AY5uWhpdv4YL4VM5c6iliiYWPgJ/nJQLp7w==
+mime-types@^2.1.12, mime-types@^2.1.34, mime-types@~2.1.19:
+  version "2.1.34"
+  resolved "https://registry.yarnpkg.com/mime-types/-/mime-types-2.1.34.tgz#5a712f9ec1503511a945803640fafe09d3793c24"
+  integrity sha512-6cP692WwGIs9XXdOO4++N+7qjqv0rqxxVvJ3VHPh/Sc9mVZcQP+ZGhkKiTvWMQRr2tbHkJP/Yn7Y0npb3ZBs4A==
   dependencies:
-    mime-db "1.44.0"
+    mime-db "1.51.0"
 
 mimic-fn@^2.1.0:
   version "2.1.0"
@@ -4681,6 +4696,11 @@ path-platform@~0.11.15:
   resolved "https://registry.yarnpkg.com/path-platform/-/path-platform-0.11.15.tgz#e864217f74c36850f0852b78dc7bf7d4a5721bf2"
   integrity sha1-6GQhf3TDaFDwhSt43Hv31KVyG/I=
 
+path-to-regexp@^6.2.0:
+  version "6.2.0"
+  resolved "https://registry.yarnpkg.com/path-to-regexp/-/path-to-regexp-6.2.0.tgz#f7b3803336104c346889adece614669230645f38"
+  integrity sha512-f66KywYG6+43afgE/8j/GoiNyygk/bnoCbps++3ErRKsIYkGGupyv07R2Ok5m9i67Iqc+T2g1eAUGUPzWhYTyg==
+
 path-type@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/path-type/-/path-type-4.0.0.tgz#84ed01c0a7ba380afe09d90a8c180dcd9d03043b"
@@ -5056,7 +5076,7 @@ rxjs@^6.6.7:
   dependencies:
     tslib "^1.9.0"
 
-safe-buffer@^5.0.1, safe-buffer@^5.1.0, safe-buffer@^5.1.1, safe-buffer@^5.1.2, safe-buffer@^5.2.0, safe-buffer@~5.2.0:
+safe-buffer@5.2.1, safe-buffer@^5.0.1, safe-buffer@^5.1.0, safe-buffer@^5.1.1, safe-buffer@^5.1.2, safe-buffer@^5.2.0, safe-buffer@~5.2.0:
   version "5.2.1"
   resolved "https://registry.yarnpkg.com/safe-buffer/-/safe-buffer-5.2.1.tgz#1eaf9fa9bdb1fdd4ec75f58f9cdb4e6b7827eec6"
   integrity sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==
