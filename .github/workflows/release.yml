@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: 12
+          node-version: 14
           registry-url: 'https://registry.npmjs.org'
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -17,8 +17,8 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: v1/${{ runner.os }}/node-12/${{ hashFiles('**/yarn.lock') }}
-          restore-keys: v1/${{ runner.os }}/node-12/
+          key: v1/${{ runner.os }}/node-14/${{ hashFiles('**/yarn.lock') }}
+          restore-keys: v1/${{ runner.os }}/node-14/
       - run: yarn
       - run: npm publish
         env:
