@@ -24,14 +24,14 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "^1.0.0-beta.44"
+    "@percy/sdk-utils": "^1.0.0"
   },
   "peerDependencies": {
     "cypress": ">=3"
   },
   "devDependencies": {
     "@cypress/code-coverage": "^3.8.1",
-    "@percy/core": "^1.0.0-beta.44",
+    "@percy/core": "^1.0.0",
     "babel-plugin-istanbul": "^6.0.0",
     "cypress": "^9.0.0",
     "eslint": "^7.22.0",
