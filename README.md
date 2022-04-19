@@ -16,6 +16,19 @@ Then add to your `cypress/support/index.js` file
 import '@percy/cypress'
 ```
 
+If you are using typescript, add the following to your `tsconfig.json`
+
+```ts
+{
+  ...
+  "compilerOptions": {
+    "types": [..., "@percy/cypress"],
+    ...
+  },
+  ...
+}
+```
+
 ## Usage
 
 This is an example using the `cy.percySnapshot` command.
