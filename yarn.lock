@@ -1569,20 +1569,15 @@
   resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.1.2.tgz#73dfaa998da707d8881c669c11f02f1342cb44df"
   integrity sha512-rXwzCyBGY2or1s7alod3RxWvI9vKKSzFInv6A26fCTYRAHjIInl4aKNzaDzUnFk35fDtLPxnIS/QkgK2L4yLyw==
 
-"@percy/logger@1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.1.0.tgz#6bb5df0563d3566071f8b718e61f11a04c5a2722"
-  integrity sha512-bAlxBcdnViTpGQZtjs361vXSlaxEj6Zt4Wt1Mo7EdPwv/zya2cBpLFNNcRycWto4mdb5Qnpht+IPXf7RFXJ/nw==
-
 "@percy/logger@1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.1.2.tgz#3d49dcc6dfe717b36b09262dbef7c5caa5976285"
   integrity sha512-6CJg+JSWITbdHCik9pqCHIe3tx+fbwGBKTKf5KtlOC6tcOStypoGUe8U3VOdSMg8xgNRxxUUEgjaXbiAyOl3Bg==
 
 "@percy/sdk-utils@^1.0.0":
-  version "1.1.2"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.1.2.tgz#08f973985dc545b4551dc9df1589d2be6465930c"
-  integrity sha512-lTKNbPpWg3vdTu+XZ5iOuAaNvcW5CKZOwTe2WkrFYO5LxckTvS93GGq6RcFqvaVRcAjhEBseEKRz36Bwub/sWg==
+  version "1.1.4"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.1.4.tgz#67a98b3da424038a49fd33673b1f7f35d04dd170"
+  integrity sha512-fXpRt9Sgq3eerBobRAZ4No/e5LqHn4IHU9bpsxSExVMYridDBB3hy31ZyTRPjImXPDqNZs6BaYB5Yn+zq8mD+A==
 
 "@tsd/typescript@~4.6.3":
   version "4.6.3"
