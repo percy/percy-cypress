@@ -33,7 +33,7 @@
     "@cypress/code-coverage": "^3.8.1",
     "@percy/core": "^1.0.0",
     "babel-plugin-istanbul": "^6.0.0",
-    "cypress": "^9.0.0",
+    "cypress": "^10.1.0",
     "eslint": "^7.22.0",
     "eslint-config-standard": "^16.0.2",
     "eslint-plugin-cypress": "^2.11.2",
