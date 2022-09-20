@@ -15,8 +15,8 @@ describe('percySnapshot', () => {
     cy.percySnapshot();
     cy.percySnapshot('Snapshot 2');
 
-    cy.then(() => helpers.get('logs')).should('include.members', [
-      'Percy is not running, disabling snapshots'
+    cy.then(() => helpers.logger.stdout).should('include.members', [
+      '[percy] Percy is not running, disabling snapshots'
     ]);
   });
 
@@ -37,8 +37,8 @@ describe('percySnapshot', () => {
 
     cy.percySnapshot();
 
-    cy.then(() => helpers.get('logs')).should('include.members', [
-      'Could not take DOM snapshot "percySnapshot handles snapshot failures"'
+    cy.then(() => helpers.logger.stderr).should('include.members', [
+      '[percy] Could not take DOM snapshot "percySnapshot handles snapshot failures"'
     ]);
   });
 
