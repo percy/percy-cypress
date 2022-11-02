@@ -73,6 +73,7 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
         // Handle errors
         log.error(`Could not take DOM snapshot "${name}"`);
         log.error(error);
+        throw error;
       });
     });
   });
