@@ -925,9 +925,9 @@ aws4@^1.8.0:
   integrity sha512-xh1Rl34h6Fi1DC2WWKfxUTVqRsNnr6LsKz2+hfwDxQJWmrx8+c7ylaqBMcHfl1U1r2dsifOvKX3LQuLNZ+XSvA==
 
 babel-loader@^9.0.0:
-  version "9.0.0"
-  resolved "https://registry.yarnpkg.com/babel-loader/-/babel-loader-9.0.0.tgz#b90f48b49f5360e4678733755d1413e16cfee48e"
-  integrity sha512-qVGQb0PNw/B1sGhPf0/KKsHZAPfa2Bk+JbjkW7yGjAHZyvjAULXYq0et0+/+7DL/rGYU+y8UoGPzA32NP29pVQ==
+  version "9.1.2"
+  resolved "https://registry.yarnpkg.com/babel-loader/-/babel-loader-9.1.2.tgz#a16a080de52d08854ee14570469905a5fc00d39c"
+  integrity sha512-mN14niXW43tddohGl8HPu5yfQq70iUThvFL/4QzESA7GcZoC0eVOhvWdQ8+3UlSjaDE9MVtsW9mxDY07W7VpVA==
   dependencies:
     find-cache-dir "^3.3.2"
     schema-utils "^4.0.0"
