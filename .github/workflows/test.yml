@@ -25,6 +25,7 @@ jobs:
       - run: |
           git clone https://github.com/percy/cli
           cd cli
+          yarn
           npx lerna run build --stream
           npx lerna exec -- yarn link
           cd .. 
