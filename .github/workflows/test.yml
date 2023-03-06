@@ -23,7 +23,7 @@ jobs:
           restore-keys: v1/${{ runner.os }}/node-${{ matrix.node }}/
       - run: yarn
       - name: Set up @percy/cli master
-        # if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           cd /tmp
           git clone https://github.com/percy/cli
