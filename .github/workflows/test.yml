@@ -27,8 +27,8 @@ jobs:
           git clone https://github.com/percy/cli
           cd cli
           yarn
-          npx lerna run build --stream
-          npx lerna exec -- yarn link
+          yarn build
+          yarn global:link
           cd .. 
           yarn remove @percy/cli && yarn link @percy/cli
           npx percy --version
