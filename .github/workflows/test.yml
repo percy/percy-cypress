@@ -21,7 +21,14 @@ jobs:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: v1/${{ runner.os }}/node-${{ matrix.node }}/${{ hashFiles('**/yarn.lock') }}
           restore-keys: v1/${{ runner.os }}/node-${{ matrix.node }}/
+      - run: apt update && apt install -y git
       - run: yarn
-      - run: git clone https://github.com/percy/cli;cd cli;yarn global:link;cd ..;yarn remove @percy/cli && yarn link @percy/cli
+      - run: git clone https://github.com/percy/cli
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - run: cd cli && npx lerna run build --stream
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - run: npx lerna exec -- yarn link;
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - run: cd .. && yarn remove @percy/cli && yarn link @percy/cli
         if: ${{ github.event_name == 'workflow_dispatch' }}
       - run: yarn test:coverage
