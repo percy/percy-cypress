@@ -6,6 +6,7 @@ on:
       branch:
         required: false
         type: string
+        default: master
 jobs:
   test:
     name: Test
@@ -28,7 +29,7 @@ jobs:
           key: v1/${{ runner.os }}/node-${{ matrix.node }}/${{ hashFiles('**/yarn.lock') }}
           restore-keys: v1/${{ runner.os }}/node-${{ matrix.node }}/
       - run: yarn
-      - name: Set up @percy/cli master
+      - name: Set up @percy/cli from git
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           cd /tmp
