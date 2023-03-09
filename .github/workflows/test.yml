@@ -1,6 +1,6 @@
 name: Test
 on: 
-  push:
+  # push:
   workflow_dispatch:
     inputs:
       branch:
@@ -34,7 +34,6 @@ jobs:
           cd /tmp
           git clone --branch ${{ github.event.inputs.branch || 'master' }} https://github.com/percy/cli
           cd cli
-          git checkout
           yarn
           yarn build
           yarn global:link
