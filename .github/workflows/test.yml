@@ -1,5 +1,11 @@
 name: Test
-on: [push, workflow_dispatch]
+on: 
+  push:
+  workflow_dispatch:
+    inputs:
+      branch:
+        required: true
+        type: string
 jobs:
   test:
     name: Test
