@@ -35,7 +35,7 @@ jobs:
           cd /tmp
           git clone --branch ${{ github.event.inputs.branch }} --depth 1 https://github.com/percy/cli
           cd cli
-          PERCY_PACKAGES=`find packages -type d -depth 1 | sed -e 's/packages/@percy/g' | tr '\n' ' '`
+          PERCY_PACKAGES=`find packages -mindepth 1 -maxdepth 1 -type d | sed -e 's/packages/@percy/g' | tr '\n' ' '`
           git log -1
           yarn
           yarn build
