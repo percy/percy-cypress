@@ -32,7 +32,7 @@ jobs:
       - name: Set up @percy/cli from git
         run: |
           cd /tmp
-          git clone --branch ${{ github.event.inputs.branch }} --depth 1 https://github.com/percy/cli
+          git clone --branch master --depth 1 https://github.com/percy/cli
           cd cli
           PERCY_PACKAGES=`find packages -type d -depth 1 | sed -e 's/packages/@percy/g' | tr '\n' ' '`
           echo "Packages: $PERCY_PACKAGES"
