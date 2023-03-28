@@ -30,7 +30,6 @@ jobs:
           restore-keys: v1/${{ runner.os }}/node-${{ matrix.node }}/
       - run: yarn
       - name: Set up @percy/cli from git
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           cd /tmp
           git clone --branch ${{ github.event.inputs.branch }} --depth 1 https://github.com/percy/cli
