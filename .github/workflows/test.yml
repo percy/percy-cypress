@@ -16,6 +16,15 @@ jobs:
         node: [14]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions-ecosystem/action-regex-match@v2
+        id: regex-match
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          text: ${{ github.event.inputs.branch }}
+          regex: '^[a-zA-Z0-9_/\-]+$'
+      - name: Break on invalid branch name
+        run: exit 1
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.regex-match.outputs && steps.regex-match.outputs.match == '' }}
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
