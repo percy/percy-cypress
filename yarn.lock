@@ -515,9 +515,9 @@
   integrity sha512-qKKSFP25X+a50vpjUSolI8WSQ2YAunS6K4brdTRemgvc48Wlkv3541SP8iMK5BAy3Nn4u0KRiwkstvyRr1tXlA==
 
 "@percy/sdk-utils@^1.3.1":
-  version "1.21.0"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.21.0.tgz#57b2ce73e7ea9a86e9f69d40e89f56f8dd294476"
-  integrity sha512-ZI6QbIhMZvE3P73ar7aeXcjSk8/czlS7h55QBynoJNorwimq5xed1CGPHu00uQsCO6dXeEKTfxQcqbCypRE6Hw==
+  version "1.24.2"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.24.2.tgz#dd9f89800aaaa2861539945d557d8ef33cfdd864"
+  integrity sha512-gjCaWcm43q4ao8NAKjvvo7kR3JU41V6xi2IVF5cvoyOUtXGRgBta+VPh6unGVLwfAoDUj2/lVcSPRdoOSwgJWg==
 
 "@sinclair/typebox@^0.25.16":
   version "0.25.24"
