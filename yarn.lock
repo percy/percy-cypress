@@ -523,10 +523,10 @@
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.25.24.tgz#8c7688559979f7079aacaf31aa881c3aa410b718"
   integrity sha512-XJfwUVUKDHF5ugKwIcxEgc9k8b7HbznCp6eUfWgu710hMPNIO4aw4/zB5RogDQz8nd6gyCDpU9O/m6qYEWY6yQ==
 
-"@tsd/typescript@~5.0.2":
-  version "5.0.2"
-  resolved "https://registry.yarnpkg.com/@tsd/typescript/-/typescript-5.0.2.tgz#085a01ad705d71b06e68007fb5ea7f0378ebb05a"
-  integrity sha512-UgFiSalbDaWrkMBQv8rHetnlwj3HVZtJo6i2aGLe50I6XdlPZFdGRfM2GOaP+i3Tm6p+YcyEql3yoi3ZPs/6Pw==
+"@tsd/typescript@~5.2.2":
+  version "5.2.2"
+  resolved "https://registry.yarnpkg.com/@tsd/typescript/-/typescript-5.2.2.tgz#b3a11006737a41abb492fe5a16de17a1c3a0126e"
+  integrity sha512-VtjHPAKJqLJoHHKBDNofzvQB2+ZVxjXU/Gw6INAS9aINLQYVsxfzrQ2s84huCeYWZRTtrr7R0J7XgpZHjNwBCw==
 
 "@types/eslint-scope@^3.7.3":
   version "3.7.3"
@@ -2502,7 +2502,7 @@ js-tokens@^4.0.0:
   resolved "https://registry.yarnpkg.com/js-tokens/-/js-tokens-4.0.0.tgz#19203fb59991df98e3a287050d4647cdeaf32499"
   integrity sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==
 
-js-yaml@4.1.0:
+js-yaml@4.1.0, js-yaml@^4.1.0:
   version "4.1.0"
   resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-4.1.0.tgz#c1fb65f8f5017901cdd2c951864ba18458a10602"
   integrity sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==
@@ -2516,13 +2516,6 @@ js-yaml@^3.13.1:
   dependencies:
     argparse "^1.0.7"
     esprima "^4.0.0"
-
-js-yaml@^4.1.0:
-  version "4.1.0"
-  resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-4.1.0.tgz#c1fb65f8f5017901cdd2c951864ba18458a10602"
-  integrity sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==
-  dependencies:
-    argparse "^2.0.1"
 
 jsbn@~0.1.0:
   version "0.1.1"
@@ -3707,12 +3700,12 @@ tsconfig-paths@^3.14.1:
     minimist "^1.2.6"
     strip-bom "^3.0.0"
 
-tsd@^0.28.0:
-  version "0.28.0"
-  resolved "https://registry.yarnpkg.com/tsd/-/tsd-0.28.0.tgz#0596cf5cf27c6075d302e9cae66f1b8db5b9c8f2"
-  integrity sha512-LWYyNoxmpp1PVfmSo84Uup304vclm4NHfS/YXUzNVRgvWrpkoSEmZuM0O5j58E+Z7fjjGRo6HlefGziKbD0zgw==
+tsd@^0.29.0:
+  version "0.29.0"
+  resolved "https://registry.yarnpkg.com/tsd/-/tsd-0.29.0.tgz#eed29647bf67ae77e4d686e9fdde5dd27bd1529f"
+  integrity sha512-5B7jbTj+XLMg6rb9sXRBGwzv7h8KJlGOkTHxY63eWpZJiQ5vJbXEjL0u7JkIxwi5EsrRE1kRVUWmy6buK/ii8A==
   dependencies:
-    "@tsd/typescript" "~5.0.2"
+    "@tsd/typescript" "~5.2.2"
     eslint-formatter-pretty "^4.1.0"
     globby "^11.0.1"
     jest-diff "^29.0.3"
