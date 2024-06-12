@@ -28,7 +28,7 @@ function cylog(message, meta) {
 }
 
 // Take a DOM snapshot and post it to the snapshot endpoint
-Cypress.Commands.add('percySnapshot', (name, options) => {
+Cypress.Commands.add('percySnapshot', (name, options, throwErrorOnFailure) => {
   let log = utils.logger('cypress');
 
   // Default name to test title
@@ -73,6 +73,7 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
         // Handle errors
         log.error(`Could not take DOM snapshot "${name}"`);
         log.error(error);
+        if (throwErrorOnFailure) throw error;
       });
     });
   });
