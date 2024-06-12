@@ -71,6 +71,7 @@ Cypress.Commands.add('percySnapshot', (name, options, throwErrorOnFailure) => {
         cylog(name, { name });
       }).catch(error => {
         // Handle errors
+        console.log(`throwErrorOnFailure: ${throwErrorOnFailure}`);
         log.error(`Could not take DOM snapshot "${name}"`);
         log.error(error);
         if (throwErrorOnFailure) throw new Error(error); ;
