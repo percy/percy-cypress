@@ -45,8 +45,7 @@ describe('percySnapshot', () => {
   it('it should throw error on failure when throwErrorOnFailure is true', () => {
     cy.then(() => helpers.test('error', '/percy/snapshot'));
 
-    expect(() => cy.percySnapshot('name', null, true))
-      .toThrowError('error');
+    expect(cy.percySnapshot('name', null, true)).to.throw(Error);
   });
 
   describe('in interactive mode', () => {
