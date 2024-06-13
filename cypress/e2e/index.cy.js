@@ -42,6 +42,35 @@ describe('percySnapshot', () => {
     ]);
   });
 
+  describe('if percyThrowErrorOnFailure set to true', () => {
+    let ogPercyThrowErrorOnFailure;
+
+    beforeEach(() => {
+      ogPercyThrowErrorOnFailure = Cypress.config('percyThrowErrorOnFailure');
+    });
+
+    afterEach(() => {
+      Cypress.config().percyThrowErrorOnFailure = ogPercyThrowErrorOnFailure;
+    });
+
+    it('disables snapshots and fails the test', () => {
+      cy.on('fail', (_err, runnable) => {
+        // it only runs when test fails.
+        // This will supress failure and pass the test.
+        return false;
+      });
+
+      Cypress.config().percyThrowErrorOnFailure = true;
+      cy.then(() => helpers.test('error', '/percy/snapshot'));
+
+      cy.percySnapshot();
+
+      cy.then(() => helpers.logger.stderr).should('include.members', [
+        '[percy] Could not take DOM snapshot "percySnapshot handles snapshot failures"'
+      ]);
+    });
+  });
+
   describe('in interactive mode', () => {
     let ogInteractive;
 
