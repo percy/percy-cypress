@@ -7,8 +7,7 @@ declare global {
     interface Chainable<Subject> {
       percySnapshot(
         name?: string,
-        options?: SnapshotOptions,
-        throwErrorOnFailure?: boolean
+        options?: SnapshotOptions
       ): Chainable<Subject>
     }
   }
