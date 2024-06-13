@@ -11,9 +11,6 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 // Maybe set the CLI API address from the environment
 utils.percy.address = Cypress.env('PERCY_SERVER_ADDRESS');
 
-// Throw error on failure if PERCY_THROW_ERROR_ON_FAILURE is true
-const PERCY_THROW_ERROR_ON_FAILURE = Cypress.env('PERCY_THROW_ERROR_ON_FAILURE');
-
 // Use Cypress's http:request backend task
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
@@ -77,7 +74,7 @@ Cypress.Commands.add('percySnapshot', (name, options) => {
         log.error(`Could not take DOM snapshot "${name}"`);
         log.error(error);
         /* istanbul ignore next */
-        if (PERCY_THROW_ERROR_ON_FAILURE && (PERCY_THROW_ERROR_ON_FAILURE === true)) {
+        if (Cypress.config('percyThrowErrorOnFailure')) {
           throw error;
         }
       });

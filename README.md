@@ -66,8 +66,13 @@ $ percy exec -- cypress run
 - `name` - The snapshot name; must be unique to each snapshot; defaults to the full test title
 - `options` - [See per-snapshot configuration options](https://docs.percy.io/docs/cli-configuration#per-snapshot-configuration)
 
-## Cypress ENV variable
-- `PERCY_THROW_ERROR_ON_FAILURE` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
+## Cypress Config
+- `percyThrowErrorOnFailure` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
+If you are using uncaught exeception then test test will pass.
+```
+cy.on("uncaught:exception", (e, runnable) => {});
+
+```
 
 ## Upgrading
 
