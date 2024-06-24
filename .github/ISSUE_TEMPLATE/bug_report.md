@@ -11,7 +11,7 @@ assignees: ''
 
 There are common setup gotchas that happen with Percy's SDKs, it would be worth reading
 the debugging document, which might already answer your question:
-https://docs.percy.io/docs/debugging-sdk
+https://www.browserstack.com/docs/percy/integrate/percy-sdk-workflow#debugging-sdks
 
 ## Reach out to Percy support instead?
 
@@ -43,7 +43,7 @@ If necessary, describe the problem you have been experiencing in more detail.
 ## Debug logs
 
 If you are reporting a bug, _always_ include logs! [Give the "Debugging SDKs"
-document a quick read for how to gather logs](https://docs.percy.io/docs/debugging-sdks#debugging-sdks)
+document a quick read for how to gather logs](https://www.browserstack.com/docs/percy/integrate/percy-sdk-workflow#debugging-sdks)
 
 Please do not trim or edit these logs, often times there are hints in the full
 logs that help debug what is going on.
