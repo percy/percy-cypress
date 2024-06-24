@@ -52,6 +52,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     } catch (error) {
       log.error(`Got error while ${context}`, meta);
       log.error(error, meta);
+      log.error(error.stack, meta);
       if (_throw) throw error;
       return error;
     }
