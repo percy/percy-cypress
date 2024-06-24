@@ -22,7 +22,7 @@ describe('percySnapshot', () => {
 
   it('posts snapshots to the local percy server', () => {
     cy.percySnapshot();
-    cy.percySnapshot('Snapshot 2');
+    cy.percySnapshot('Snapshot 2', { enableJavascript: true });
 
     cy.then(() => helpers.get('logs'))
       .should('include', `Snapshot found: ${cy.state('runnable').fullTitle()}`)
@@ -32,13 +32,24 @@ describe('percySnapshot', () => {
       .should('include', 'Snapshot found: Snapshot 2');
   });
 
+  it('works with with only options passed', () => {
+    cy.percySnapshot({ enableJavascript: true });
+
+    cy.then(() => helpers.get('logs'))
+      .should('include', `Snapshot found: ${cy.state('runnable').fullTitle()}`)
+      .should('include', `- url: ${helpers.testSnapshotURL}`)
+      .should('include.match', /clientInfo: @percy\/cypress\/.+/)
+      .should('include.match', /environmentInfo: cypress\/.+/);
+  });
+
   it('handles snapshot failures', () => {
     cy.then(() => helpers.test('error', '/percy/snapshot'));
 
     cy.percySnapshot();
 
     cy.then(() => helpers.logger.stderr).should('include.members', [
-      '[percy] Could not take DOM snapshot "percySnapshot handles snapshot failures"'
+      '[percy] Got error while posting dom snapshot',
+      '[percy] Error: testing'
     ]);
   });
 
