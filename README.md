@@ -64,7 +64,7 @@ $ percy exec -- cypress run
 `cy.percySnapshot([name][, options])`
 
 - `name` - The snapshot name; must be unique to each snapshot; defaults to the full test title
-- `options` - [See per-snapshot configuration options](https://docs.percy.io/docs/cli-configuration#per-snapshot-configuration)
+- `options` - [See per-snapshot configuration options](https://www.browserstack.com/docs/percy/take-percy-snapshots/overview#per-snapshot-configuration)
 
 ## Cypress Config
 - `percyThrowErrorOnFailure` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
