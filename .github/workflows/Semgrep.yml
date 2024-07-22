@@ -42,7 +42,7 @@ jobs:
             SEMGREP_RULES: p/default # more at semgrep.dev/explore
 
       - name: Upload SARIF file for GitHub Advanced Security Dashboard
-        uses: github/codeql-action/upload-sarif@489225d82a57396c6f426a40e66d461b16b3461d # v2.20.4
+        uses: github/codeql-action/upload-sarif@2d790406f505036ef40ecba973cc774a50395aac # v3.25.13
         with:
           sarif_file: semgrep.sarif
         if: always()
