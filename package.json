@@ -37,7 +37,7 @@
     "cypress": "^12.8.1",
     "eslint": "^7.22.0",
     "eslint-config-standard": "^16.0.2",
-    "eslint-plugin-cypress": "^2.11.2",
+    "eslint-plugin-cypress": "^3.6.0",
     "eslint-plugin-import": "^2.22.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^5.1.0",
