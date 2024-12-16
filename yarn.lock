@@ -524,9 +524,9 @@
   integrity sha512-G0is92dYAHYlq6dXHGl/R6vwiJtGdAy9TIDXY5ShXtUMWE8sRJwisgvo9LavZKqCoOVqLvmizMxG//NAN2pTMQ==
 
 "@percy/sdk-utils@^1.3.1":
-  version "1.30.4"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.30.4.tgz#32010180bdb2fdc504fd3abb6f6d25d9028853e9"
-  integrity sha512-G0is92dYAHYlq6dXHGl/R6vwiJtGdAy9TIDXY5ShXtUMWE8sRJwisgvo9LavZKqCoOVqLvmizMxG//NAN2pTMQ==
+  version "1.30.5"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.30.5.tgz#984d6165cc9356ddc8f72b837f3395a050859ff9"
+  integrity sha512-0XCTywh03lynsvPxAgPpZOR3Zg5hqzWCWlJP2T2o/jKS7cT+O4vqS6jZfWoA9ik0ivji5bthaAHEmqVKdw1dDQ==
 
 "@percy/webdriver-utils@1.30.4":
   version "1.30.4"
