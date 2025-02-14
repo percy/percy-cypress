@@ -108,4 +108,66 @@ describe('percySnapshot', () => {
       });
     });
   });
+
+  describe('withRetry Function Test', () => {
+    const withRetry = (func) => {
+      let attempt = 1;
+      const maxAttempts = 3;
+      const sleepTime = 1000;
+
+      const tryFunction = () => {
+        return func().catch((error) => {
+          if (attempt < maxAttempts) {
+            cy.log(`Retrying... (${attempt}/${maxAttempts})`);
+            attempt += 1;
+            return new Cypress.Promise((resolve) =>
+              setTimeout(() => resolve(tryFunction()), sleepTime)
+            );
+          }
+          throw error;
+        });
+      };
+
+      return tryFunction();
+    };
+
+    it('should succeed after retries', () => {
+      let failureCount = 0;
+      const mockFunction = () => {
+        return new Cypress.Promise((resolve, reject) => {
+          if (failureCount < 2) {
+            failureCount += 1;
+            reject(new Error('Mock error'));
+          } else {
+            resolve('Success');
+          }
+        });
+      };
+
+      cy.wrap(null).then(() => {
+        return withRetry(mockFunction).then((result) => {
+          expect(result).to.equal('Success');
+        });
+      });
+    });
+
+    it('should fail after max retries', () => {
+      const alwaysFailingFunction = () => {
+        return new Cypress.Promise((resolve, reject) => {
+          reject(new Error('Mock error'));
+        });
+      };
+
+      cy.wrap(null).then(() => {
+        return withRetry(alwaysFailingFunction).then(
+          () => {
+            throw new Error('Test should have failed but succeeded');
+          },
+          (error) => {
+            expect(error.message).to.equal('Mock error');
+          }
+        );
+      });
+    });
+  });
 });
