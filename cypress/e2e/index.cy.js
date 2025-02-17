@@ -173,23 +173,23 @@ describe('percySnapshot', () => {
     it('should call withLog and retry with withRetry thrice on postSnapshot failure', () => {
       let retryCount = 0;
       const utils = require('@percy/sdk-utils');
-  
+
       cy.stub(utils, 'postSnapshot').callsFake(() => {
         retryCount += 1;
         return Cypress.Promise.reject(new Error('postSnapshot failed'));
       });
-  
+
       const withLog = (func, context, _throw = true) => {
         return func().catch((error) => {
           if (_throw) throw error;
           return error;
         });
       };
-  
+
       const withRetryAndLog = (func) => {
         return withRetry(() => withLog(func, 'posting dom snapshot'));
       };
-  
+
       cy.wrap(null).then(() => {
         return withRetryAndLog(utils.postSnapshot).catch((error) => {
           expect(error.message).to.equal('postSnapshot failed');
