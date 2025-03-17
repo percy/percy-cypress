@@ -37,7 +37,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     name = undefined;
   }
   // Default name to test title
-  name ||= cy.state('runnable').fullTitle();
+  name = name || cy.state('runnable').fullTitle();
 
   const meta = {
     snapshot: {
