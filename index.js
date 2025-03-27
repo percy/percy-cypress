@@ -1,4 +1,5 @@
 const utils = require('@percy/sdk-utils');
+const { createRegion } = require('./createRegion');
 
 // Collect client and environment information
 const sdkPkg = require('./package.json');
@@ -127,3 +128,5 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     });
   });
 });
+
+module.exports = { createRegion };
