@@ -1,4 +1,5 @@
 import helpers from '@percy/sdk-utils/test/helpers';
+import { createRegion } from '../index';
 
 const { match } = Cypress.sinon;
 
@@ -51,6 +52,33 @@ describe('percySnapshot', () => {
       '[percy] Got error while posting dom snapshot',
       '[percy] Error: testing'
     ]);
+  });
+
+  describe('createRegion function', () => {
+    it('creates a region object with default values', () => {
+      const region = createRegion();
+      expect(region).to.deep.equal({ algorithm: 'ignore', elementSelector: {} });
+    });
+
+    it('creates a region object with provided values', () => {
+      const region = createRegion({ boundingBox: { x: 10, y: 20, width: 100, height: 200 }, algorithm: 'standard' });
+      expect(region).to.deep.equal({
+        algorithm: 'standard',
+        elementSelector: { boundingBox: { x: 10, y: 20, width: 100, height: 200 } }
+      });
+    });
+
+    it('adds configuration properties when using standard or intelliignore', () => {
+      const region = createRegion({ algorithm: 'standard', diffSensitivity: 0.5 });
+      expect(region).to.have.property('configuration');
+      expect(region.configuration).to.deep.equal({ diffSensitivity: 0.5 });
+    });
+
+    it('adds assertion properties if diffIgnoreThreshold is provided', () => {
+      const region = createRegion({ diffIgnoreThreshold: 0.1 });
+      expect(region).to.have.property('assertion');
+      expect(region.assertion).to.deep.equal({ diffIgnoreThreshold: 0.1 });
+    });
   });
 
   describe('if percyThrowErrorOnFailure set to true', () => {
