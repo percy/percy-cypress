@@ -27,11 +27,11 @@ const createRegion = function({
 
   const configuration = {};
   if (['standard', 'intelliignore'].includes(algorithm)) {
-    if (diffSensitivity !== null) configuration.diffSensitivity = diffSensitivity;
-    if (imageIgnoreThreshold !== null) configuration.imageIgnoreThreshold = imageIgnoreThreshold;
-    if (carouselsEnabled !== null) configuration.carouselsEnabled = carouselsEnabled;
-    if (bannersEnabled !== null) configuration.bannersEnabled = bannersEnabled;
-    if (adsEnabled !== null) configuration.adsEnabled = adsEnabled;
+    if (diffSensitivity) configuration.diffSensitivity = diffSensitivity;
+    if (imageIgnoreThreshold) configuration.imageIgnoreThreshold = imageIgnoreThreshold;
+    if (carouselsEnabled) configuration.carouselsEnabled = carouselsEnabled;
+    if (bannersEnabled) configuration.bannersEnabled = bannersEnabled;
+    if (adsEnabled) configuration.adsEnabled = adsEnabled;
   }
 
   if (Object.keys(configuration).length > 0) {
@@ -39,7 +39,7 @@ const createRegion = function({
   }
 
   const assertion = {};
-  if (diffIgnoreThreshold !== null) {
+  if (diffIgnoreThreshold) {
     assertion.diffIgnoreThreshold = diffIgnoreThreshold;
   }
 
