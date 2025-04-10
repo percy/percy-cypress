@@ -1,5 +1,5 @@
 import helpers from '@percy/sdk-utils/test/helpers';
-import { createRegion } from '../../createRegion';
+import { createRegion } from '../../index.js';
 
 const { match } = Cypress.sinon;
 
