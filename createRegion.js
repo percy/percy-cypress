@@ -20,7 +20,7 @@ const createRegion = function({
     algorithm,
     elementSelector
   };
-  //test
+
   if (padding) {
     region.padding = padding;
   }
