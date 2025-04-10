@@ -3,7 +3,7 @@ const createRegion = function({
   elementXpath = null,
   elementCSS = null,
   padding = null,
-  algorithm = 'intelliignore',
+  algorithm = 'ignore',
   diffSensitivity = null,
   imageIgnoreThreshold = null,
   carouselsEnabled = null,
@@ -20,7 +20,7 @@ const createRegion = function({
     algorithm,
     elementSelector
   };
-
+  //test
   if (padding) {
     region.padding = padding;
   }
