@@ -535,6 +535,13 @@
   resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.30.9.tgz#fdc65afbeb8db96cc34cebd3e206564eadd30e1c"
   integrity sha512-vgzWUa1eDWRS+q/zlVILwP4QDFdmxPIiH7FbQ2UGA4rh3mDYporIq5OY+x2YMMV9/Q4uhi1p3ZxXW2Svg6cOHw==
 
+"@percy/sdk-utils@1.31.3":
+  version "1.31.3"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.31.3.tgz#a591a86588c29558bb34c0a1c0da2b1bc26c2e03"
+  integrity sha512-iEnhc+x5lVmH6va5FuljAWfSFcjjqcPJ+GgoFvuvvYv39nMgXgsw4qGT+sr2ET+FpBB4f0MNs/Bn7QEkk1TlvA==
+  dependencies:
+    pac-proxy-agent "^7.0.2"
+
 "@percy/webdriver-utils@1.30.9":
   version "1.30.9"
   resolved "https://registry.yarnpkg.com/@percy/webdriver-utils/-/webdriver-utils-1.30.9.tgz#4495bc5a043a82d2b2aeee1488d9c5acce72b29e"
