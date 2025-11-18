@@ -66,6 +66,48 @@ $ percy exec -- cypress run
 - `name` - The snapshot name; must be unique to each snapshot; defaults to the full test title
 - `options` - [See per-snapshot configuration options](https://www.browserstack.com/docs/percy/take-percy-snapshots/overview#per-snapshot-configuration)
 
+### Advanced Options
+
+Percy Cypress now supports comprehensive snapshot options including:
+
+- **Minimum Height**: `minHeight: 2000` - Set minimum snapshot height for tall pages
+- **Animation Freezing**: Use `percyCSS` to freeze animations - `percyCSS: 'img { animation: none !important; }'`
+- **Custom CSS**: `percyCSS` - Inject temporary CSS before snapshot
+- **Regions Array**: Use `createRegion()` helper with `algorithm: 'ignore'` or `algorithm: 'standard'` for ignore/consider regions
+- **Advanced Regions**: `regions` array for per-region algorithm configuration (ignore, standard, intelliignore, layout)
+- **Sync Results**: `sync: true` - Get processed results synchronously
+- **Cookie Capture**: Automatically captures cookies for accurate session reproduction
+- **Cross-Origin iframes**: Automatically serializes cross-origin iframe content
+
+Example:
+```javascript
+const { createRegion } = require('@percy/cypress');
+
+const timestampRegion = createRegion({
+  elementCSS: '.timestamp',
+  algorithm: 'ignore'
+});
+
+const headerRegion = createRegion({
+  elementCSS: '.header',
+  algorithm: 'intelliignore',
+  diffSensitivity: 2,
+  bannersEnabled: true
+});
+
+cy.percySnapshot('Advanced Snapshot', {
+  minHeight: 2000,
+  percyCSS: '.dynamic { display: none; } img { animation: none !important; }',
+  regions: [timestampRegion, headerRegion]
+});
+      diffSensitivity: 2
+    })
+  ]
+});
+```
+
+For complete documentation, see [FEATURES.md](FEATURES.md).
+
 ## Cypress Config
 - `percyThrowErrorOnFailure` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
 If you are using uncaught exeception then test test will pass.

@@ -28,6 +28,51 @@ function cylog(message, meta) {
   });
 }
 
+// Processes a single cross-origin frame to capture its snapshot and resources.
+async function processFrame(win, frame, options, percyDOM, logger) {
+  const frameUrl = frame.location.href;
+
+  try {
+    // Inject Percy DOM into the frame
+    frame.eval(percyDOM);
+
+    // Serialize the frame content
+    // enableJavaScript: true prevents the standard iframe serialization logic from running.
+    const iframeSnapshot = frame.eval((opts) => {
+      /* eslint-disable-next-line no-undef */
+      return PercyDOM.serialize(opts);
+    }, { ...options, enableJavascript: true });
+
+    // Create a new resource for the iframe's HTML
+    const iframeResource = {
+      url: frameUrl,
+      content: iframeSnapshot.html,
+      mimetype: 'text/html'
+    };
+
+    // Get the iframe's element data from the main window context
+    const iframeData = win.eval((fUrl) => {
+      const iframes = Array.from(document.querySelectorAll('iframe'));
+      const matchingIframe = iframes.find(iframe => iframe.src && iframe.src.startsWith(fUrl));
+      if (matchingIframe) {
+        return {
+          percyElementId: matchingIframe.getAttribute('data-percy-element-id')
+        };
+      }
+    }, frameUrl);
+
+    return {
+      iframeData,
+      iframeResource,
+      iframeSnapshot,
+      frameUrl
+    };
+  } catch (error) {
+    logger.error(`Error processing iframe ${frameUrl}:`, error);
+    return null;
+  }
+}
+
 // Take a DOM snapshot and post it to the snapshot endpoint
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let log = utils.logger('cypress');
@@ -106,6 +151,74 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
+      // Process Cross-Origin IFrames
+      const currentUrl = new URL(dom.URL);
+      const crossOriginFrames = [];
+
+      // Get all iframes from the document
+      const iframes = dom.querySelectorAll('iframe');
+      for (const iframe of iframes) {
+        try {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (!iframeDoc) continue; // Cannot access cross-origin iframe
+
+          const iframeUrl = iframe.contentWindow.location.href;
+          if (iframeUrl === 'about:blank') continue;
+
+          const iframeOrigin = new URL(iframeUrl).origin;
+          if (iframeOrigin !== currentUrl.origin) {
+            crossOriginFrames.push({
+              element: iframe,
+              window: iframe.contentWindow,
+              url: iframeUrl
+            });
+          }
+        } catch (e) {
+          // Cross-origin access error - expected for cross-origin iframes
+          // We can't access these, so skip them
+        }
+      }
+
+      // Process cross-origin frames in parallel
+      if (crossOriginFrames.length > 0) {
+        const percyDOM = await utils.fetchPercyDOM();
+
+        const processedFrames = await Promise.all(
+          crossOriginFrames.map(({ element, window: frameWindow, url }) =>
+            processFrame(window, frameWindow, options, percyDOM, log)
+          )
+        ).then(results => results.filter(r => r !== null));
+
+        for (const { iframeData, iframeResource, iframeSnapshot, frameUrl } of processedFrames) {
+          // Add the iframe's own resources to the main snapshot
+          if (iframeSnapshot && iframeSnapshot.resources && Array.isArray(iframeSnapshot.resources)) {
+            domSnapshot.resources.push(...iframeSnapshot.resources);
+          }
+          // Add the iframe HTML resource itself
+          domSnapshot.resources.push(iframeResource);
+
+          if (iframeData && iframeData.percyElementId) {
+            const regex = new RegExp(`(<iframe[^>]*data-percy-element-id=["']${iframeData.percyElementId}["'][^>]*>)`);
+            const match = domSnapshot.html.match(regex);
+
+            if (match) {
+              const iframeTag = match[1];
+              // Replace the original iframe tag with one that points to the new resource.
+              const newIframeTag = iframeTag.replace(/src="[^"]*"/i, `src="${frameUrl}"`);
+              domSnapshot.html = domSnapshot.html.replace(iframeTag, newIframeTag);
+            }
+          }
+        }
+      }
+
+      // Capture cookies
+      await withLog(async () => {
+        const cookies = await cy.getCookies({ log: false });
+        if (cookies && cookies.length > 0) {
+          domSnapshot.cookies = cookies;
+        }
+      }, 'capturing cookies', false);
+
       const throwConfig = Cypress.config('percyThrowErrorOnFailure');
       const _throw = throwConfig === undefined ? false : throwConfig;
 
@@ -130,3 +243,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 });
 
 module.exports = { createRegion };
+module.exports.createRegion = createRegion;
+module.exports.CLIENT_INFO = CLIENT_INFO;
+module.exports.ENV_INFO = ENV_INFO;

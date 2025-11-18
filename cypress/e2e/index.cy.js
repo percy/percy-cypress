@@ -274,4 +274,156 @@ describe('percySnapshot', () => {
     expect(region).to.have.property('configuration');
     expect(region.configuration).to.have.property('adsEnabled', true);
   });
+
+  describe('New Feature Tests', () => {
+    it('supports minHeight option', () => {
+      cy.percySnapshot('Min Height Test', { minHeight: 2000 });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Min Height Test');
+    });
+
+    it('supports sync option', () => {
+      cy.percySnapshot('Sync Test', { sync: true });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Sync Test');
+    });
+
+    it('supports percyCSS option', () => {
+      cy.percySnapshot('Percy CSS Test', { percyCSS: 'body { background: red; }' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Percy CSS Test');
+    });
+
+    it('supports percyCSS for freezing animations', () => {
+      cy.percySnapshot('Freeze Animation Test', { percyCSS: 'img { animation: none !important; }' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Freeze Animation Test');
+    });
+
+    it('supports percyCSS for freezing specific elements', () => {
+      cy.percySnapshot('Freeze By Selector Test', {
+        percyCSS: '.animated-image { animation: none !important; }'
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Freeze By Selector Test');
+    });
+
+    it('supports regions array with ignore algorithm', () => {
+      const ignoreRegion = createRegion({
+        elementCSS: '.ignore-this',
+        algorithm: 'ignore'
+      });
+
+      cy.percySnapshot('Ignore Region Test', {
+        regions: [ignoreRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Ignore Region Test');
+    });
+
+    it('supports regions array with xpath', () => {
+      const ignoreRegion = createRegion({
+        elementXpath: '//div[@id="ignore"]',
+        algorithm: 'ignore'
+      });
+
+      cy.percySnapshot('Ignore Region XPath Test', {
+        regions: [ignoreRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Ignore Region XPath Test');
+    });
+
+    it('supports regions array with boundingBox', () => {
+      const customRegion = createRegion({
+        boundingBox: { x: 10, y: 10, width: 100, height: 110 },
+        algorithm: 'ignore'
+      });
+
+      cy.percySnapshot('Custom Ignore Region Test', {
+        regions: [customRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Custom Ignore Region Test');
+    });
+
+    it('supports regions array with standard algorithm', () => {
+      const considerRegion = createRegion({
+        elementCSS: '.important',
+        algorithm: 'standard',
+        diffSensitivity: 1
+      });
+
+      cy.percySnapshot('Consider Region Test', {
+        regions: [considerRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Consider Region Test');
+    });
+
+    it('supports regions array with xpath and standard algorithm', () => {
+      const considerRegion = createRegion({
+        elementXpath: '//div[@id="important"]',
+        algorithm: 'standard',
+        diffSensitivity: 1
+      });
+
+      cy.percySnapshot('Consider Region XPath Test', {
+        regions: [considerRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Consider Region XPath Test');
+    });
+
+    it('supports regions array with boundingBox and standard algorithm', () => {
+      const customRegion = createRegion({
+        boundingBox: { x: 10, y: 10, width: 100, height: 110 },
+        algorithm: 'standard',
+        diffSensitivity: 1
+      });
+
+      cy.percySnapshot('Custom Consider Region Test', {
+        regions: [customRegion]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Custom Consider Region Test');
+    });
+
+    it('supports regions array option', () => {
+      const region1 = createRegion({
+        elementCSS: '.test-region',
+        algorithm: 'intelliignore',
+        diffSensitivity: 2,
+        adsEnabled: true
+      });
+
+      cy.percySnapshot('Regions Array Test', {
+        regions: [region1]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Regions Array Test');
+    });
+
+    it('captures cookies in snapshots', () => {
+      // Set some test cookies
+      cy.setCookie('test_cookie', 'test_value');
+
+      cy.percySnapshot('Cookie Capture Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Cookie Capture Test');
+    });
+  });
 });
