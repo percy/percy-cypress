@@ -417,13 +417,25 @@ describe('percySnapshot', () => {
     });
 
     it('captures cookies in snapshots', () => {
-      // Set some test cookies
+      // Set some test cookies before taking snapshot
       cy.setCookie('test_cookie', 'test_value');
+      cy.setCookie('another_cookie', 'another_value');
+
+      // Verify cookies are set
+      cy.getCookies().should('have.length', 2);
 
       cy.percySnapshot('Cookie Capture Test');
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Cookie Capture Test');
+    });
+
+    it('handles snapshots with no cookies', () => {
+      cy.clearCookies();
+      cy.getCookies().should('have.length', 0);
+      cy.percySnapshot('No Cookie Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Cookie Test');
     });
   });
 });

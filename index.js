@@ -1,5 +1,6 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
+const { processCrossOriginIframes } = require('./cross-origin-iframes');
 
 // Collect client and environment information
 const sdkPkg = require('./package.json');
@@ -26,56 +27,6 @@ function cylog(message, meta) {
     consoleProps: () => meta,
     message
   });
-}
-
-// Processes a single cross-origin frame to capture its snapshot and resources.
-async function processFrame(win, frame, options, percyDOM, logger) {
-  const frameUrl = frame.location.href;
-
-  try {
-    // Inject Percy DOM into the frame
-    /* istanbul ignore next - cross-origin iframe errors are difficult to reproduce in tests */
-    frame.eval(percyDOM);
-
-    // Serialize the frame content
-    // enableJavaScript: true prevents the standard iframe serialization logic from running.
-    const iframeSnapshot = frame.eval((opts) => {
-      /* eslint-disable-next-line no-undef */
-      return PercyDOM.serialize(opts);
-    }, { ...options, enableJavascript: true });
-
-    // Create a new resource for the iframe's HTML
-    const iframeResource = {
-      url: frameUrl,
-      content: iframeSnapshot.html,
-      mimetype: 'text/html'
-    };
-
-    // Get the iframe's element data from the main window context
-    const iframeData = win.eval((fUrl) => {
-      const iframes = Array.from(document.querySelectorAll('iframe'));
-      const matchingIframe = iframes.find(iframe => iframe.src && iframe.src.startsWith(fUrl));
-      if (matchingIframe) {
-        return {
-          percyElementId: matchingIframe.getAttribute('data-percy-element-id')
-        };
-      }
-      /* istanbul ignore next - missing iframe is an edge case */
-      return undefined;
-    }, frameUrl);
-
-    return {
-      iframeData,
-      iframeResource,
-      iframeSnapshot,
-      frameUrl
-    };
-  } catch (error) {
-    /* istanbul ignore next - cross-origin iframe errors are difficult to reproduce in tests */
-    logger.error(`Error processing iframe ${frameUrl}:`, error);
-    /* istanbul ignore next */
-    return null;
-  }
 }
 
 // Take a DOM snapshot and post it to the snapshot endpoint
@@ -152,105 +103,40 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     // Serialize and capture the DOM
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
+      /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
       // Process Cross-Origin IFrames
-      const currentUrl = new URL(dom.URL);
-      const crossOriginFrames = [];
-
-      // Get all iframes from the document
-      const iframes = dom.querySelectorAll('iframe');
-      for (const iframe of iframes) {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          /* istanbul ignore next - cross-origin iframe access is difficult to test */
-          if (!iframeDoc) continue; // Cannot access cross-origin iframe
-
-          const iframeUrl = iframe.contentWindow.location.href;
-          /* istanbul ignore next - about:blank iframes are an edge case */
-          if (iframeUrl === 'about:blank') continue;
-
-          const iframeOrigin = new URL(iframeUrl).origin;
-          /* istanbul ignore next - cross-origin iframes are difficult to reproduce in tests */
-          if (iframeOrigin !== currentUrl.origin) {
-            crossOriginFrames.push({
-              element: iframe,
-              window: iframe.contentWindow,
-              url: iframeUrl
-            });
-          }
-        } catch (e) {
-          /* istanbul ignore next - cross-origin errors are expected but difficult to test */
-          // Cross-origin access error - expected for cross-origin iframes
-          // We can't access these, so skip them
-        }
-      }
-
-      // Process cross-origin frames in parallel
-      /* istanbul ignore next - cross-origin iframe processing is difficult to test */
-      if (crossOriginFrames.length > 0) {
-        const percyDOM = await utils.fetchPercyDOM();
-
-        const processedFrames = await Promise.all(
-          crossOriginFrames.map(({ element, window: frameWindow, url }) =>
-            processFrame(window, frameWindow, options, percyDOM, log)
-          )
-        ).then(results => results.filter(r => r !== null));
-
-        for (const { iframeData, iframeResource, iframeSnapshot, frameUrl } of processedFrames) {
-          // Add the iframe's own resources to the main snapshot
-          if (iframeSnapshot && iframeSnapshot.resources && Array.isArray(iframeSnapshot.resources)) {
-            domSnapshot.resources.push(...iframeSnapshot.resources);
-          }
-          // Add the iframe HTML resource itself
-          domSnapshot.resources.push(iframeResource);
-
-          /* istanbul ignore else - iframeData being null is a rare edge case */
-          if (iframeData && iframeData.percyElementId) {
-            const regex = new RegExp(`(<iframe[^>]*data-percy-element-id=["']${iframeData.percyElementId}["'][^>]*>)`);
-            const match = domSnapshot.html.match(regex);
-
-            /* istanbul ignore else - regex not matching is a rare edge case */
-            if (match) {
-              const iframeTag = match[1];
-              // Replace the original iframe tag with one that points to the new resource.
-              const newIframeTag = iframeTag.replace(/src="[^"]*"/i, `src="${frameUrl}"`);
-              domSnapshot.html = domSnapshot.html.replace(iframeTag, newIframeTag);
-            }
-          }
-        }
-      }
+      domSnapshot = await processCrossOriginIframes(window, dom, domSnapshot, options, log);
 
       // Capture cookies
-      await withLog(async () => {
-        const cookies = await cy.getCookies({ log: false });
-        /* istanbul ignore else - empty cookies is an edge case */
+      return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
           domSnapshot.cookies = cookies;
         }
-      }, 'capturing cookies', false);
 
-      const throwConfig = Cypress.config('percyThrowErrorOnFailure');
-      const _throw = throwConfig === undefined ? false : throwConfig;
+        const throwConfig = Cypress.config('percyThrowErrorOnFailure');
+        const _throw = throwConfig === undefined ? false : throwConfig;
 
-      // Post the DOM snapshot to Percy
-      let response = await withRetry(async () => await withLog(async () => {
-        return await utils.postSnapshot({
-          ...options,
-          environmentInfo: ENV_INFO,
-          clientInfo: CLIENT_INFO,
-          domSnapshot,
-          url: dom.URL,
-          name
-        });
-      }, 'posting dom snapshot', _throw));
+        // Post the DOM snapshot to Percy
+        let response = await withRetry(async () => await withLog(async () => {
+          return await utils.postSnapshot({
+            ...options,
+            environmentInfo: ENV_INFO,
+            clientInfo: CLIENT_INFO,
+            domSnapshot,
+            url: dom.URL,
+            name
+          });
+        }, 'posting dom snapshot', _throw));
 
-      // Log the snapshot name on success
-      cylog(name, meta);
+        // Log the snapshot name on success
+        cylog(name, meta);
 
-      return response;
+        return response;
+      });
     });
   });
 });
