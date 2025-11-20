@@ -77,7 +77,6 @@ Percy Cypress now supports comprehensive snapshot options including:
 - **Advanced Regions**: `regions` array for per-region algorithm configuration (ignore, standard, intelliignore, layout)
 - **Sync Results**: `sync: true` - Get processed results synchronously
 - **Cookie Capture**: Automatically captures cookies for accurate session reproduction
-- **Cross-Origin iframes**: Automatically serializes cross-origin iframe content
 
 Example:
 ```javascript

@@ -1,6 +1,5 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
-const { processCrossOriginIframes } = require('./cross-origin-iframes');
 
 // Collect client and environment information
 const sdkPkg = require('./package.json');
@@ -107,9 +106,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
-
-      // Process Cross-Origin IFrames
-      domSnapshot = await processCrossOriginIframes(window, dom, domSnapshot, options, log);
 
       // Capture cookies
       return cy.getCookies({ log: false }).then(async (cookies) => {

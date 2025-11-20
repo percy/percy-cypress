@@ -4,7 +4,6 @@
   "functions": 100,
   "statements": 100,
   "exclude": [
-    "cypress/support/**",
-    "cross-origin-iframes.js"
+    "cypress/support/**"
   ]
 }
