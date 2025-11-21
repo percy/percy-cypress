@@ -66,6 +66,16 @@ $ percy exec -- cypress run
 - `name` - The snapshot name; must be unique to each snapshot; defaults to the full test title
 - `options` - [See per-snapshot configuration options](https://www.browserstack.com/docs/percy/take-percy-snapshots/overview#per-snapshot-configuration)
 
+### Advanced Options
+
+Percy Cypress now supports comprehensive snapshot options including:
+
+- **Minimum Height**: `minHeight: 2000` - Set minimum snapshot height for tall pages
+- **Animation Freezing**: Use `percyCSS` to freeze animations - `percyCSS: 'img { animation: none !important; }'`
+- **Custom CSS**: `percyCSS` - Inject temporary CSS before snapshot
+- **Sync Results**: `sync: true` - Get processed results synchronously
+- **Cookie Capture**: Automatically captures cookies for accurate session reproduction
+
 ## Cypress Config
 - `percyThrowErrorOnFailure` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
 If you are using uncaught exeception then test test will pass.

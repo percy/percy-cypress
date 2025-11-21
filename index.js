@@ -102,29 +102,37 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     // Serialize and capture the DOM
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
+      /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
-      const throwConfig = Cypress.config('percyThrowErrorOnFailure');
-      const _throw = throwConfig === undefined ? false : throwConfig;
+      // Capture cookies
+      return cy.getCookies({ log: false }).then(async (cookies) => {
+        if (cookies && cookies.length > 0) {
+          domSnapshot.cookies = cookies;
+        }
 
-      // Post the DOM snapshot to Percy
-      let response = await withRetry(async () => await withLog(async () => {
-        return await utils.postSnapshot({
-          ...options,
-          environmentInfo: ENV_INFO,
-          clientInfo: CLIENT_INFO,
-          domSnapshot,
-          url: dom.URL,
-          name
-        });
-      }, 'posting dom snapshot', _throw));
+        const throwConfig = Cypress.config('percyThrowErrorOnFailure');
+        const _throw = throwConfig === undefined ? false : throwConfig;
 
-      // Log the snapshot name on success
-      cylog(name, meta);
+        // Post the DOM snapshot to Percy
+        let response = await withRetry(async () => await withLog(async () => {
+          return await utils.postSnapshot({
+            ...options,
+            environmentInfo: ENV_INFO,
+            clientInfo: CLIENT_INFO,
+            domSnapshot,
+            url: dom.URL,
+            name
+          });
+        }, 'posting dom snapshot', _throw));
 
-      return response;
+        // Log the snapshot name on success
+        cylog(name, meta);
+
+        return response;
+      });
     });
   });
 });

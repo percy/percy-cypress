@@ -274,4 +274,65 @@ describe('percySnapshot', () => {
     expect(region).to.have.property('configuration');
     expect(region.configuration).to.have.property('adsEnabled', true);
   });
+
+  describe('New Feature Tests', () => {
+    it('supports minHeight option', () => {
+      cy.percySnapshot('Min Height Test', { minHeight: 2000 });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Min Height Test');
+    });
+
+    it('supports sync option', () => {
+      cy.percySnapshot('Sync Test', { sync: true });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Sync Test');
+    });
+
+    it('supports percyCSS option', () => {
+      cy.percySnapshot('Percy CSS Test', { percyCSS: 'body { background: red; }' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Percy CSS Test');
+    });
+
+    it('supports percyCSS for freezing animations', () => {
+      cy.percySnapshot('Freeze Animation Test', { percyCSS: 'img { animation: none !important; }' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Freeze Animation Test');
+    });
+
+    it('supports percyCSS for freezing specific elements', () => {
+      cy.percySnapshot('Freeze By Selector Test', {
+        percyCSS: '.animated-image { animation: none !important; }'
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Freeze By Selector Test');
+    });
+
+    it('captures cookies in snapshots', () => {
+      // Set some test cookies before taking snapshot
+      cy.setCookie('test_cookie', 'test_value');
+      cy.setCookie('another_cookie', 'another_value');
+
+      // Verify cookies are set
+      cy.getCookies().should('have.length', 2);
+
+      cy.percySnapshot('Cookie Capture Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Cookie Capture Test');
+    });
+
+    it('handles snapshots with no cookies', () => {
+      cy.clearCookies();
+      cy.getCookies().should('have.length', 0);
+      cy.percySnapshot('No Cookie Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Cookie Test');
+    });
+  });
 });
