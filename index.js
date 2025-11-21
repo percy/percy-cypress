@@ -138,6 +138,3 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 });
 
 module.exports = { createRegion };
-module.exports.createRegion = createRegion;
-module.exports.CLIENT_INFO = CLIENT_INFO;
-module.exports.ENV_INFO = ENV_INFO;
