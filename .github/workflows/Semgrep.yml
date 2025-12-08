@@ -34,7 +34,7 @@ jobs:
 
     steps:
       # Fetch project source with GitHub Actions Checkout.
-      - uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       # Run the "semgrep ci" command on the command line of the docker image.
       - run: semgrep ci --sarif --output=semgrep.sarif
         env:
