@@ -108,7 +108,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }, 'taking dom snapshot');
 
       // Capture cookies
-      return cy.getCookies({ log: false }).then(async (cookies) => {
+      return cy.getCookies({ log: false }).then({ timeout: CY_TIMEOUT }, async (cookies) => {
         if (cookies && cookies.length > 0) {
           domSnapshot.cookies = cookies;
         }
