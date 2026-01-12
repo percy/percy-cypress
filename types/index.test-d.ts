@@ -29,7 +29,7 @@ expectType<Region>(createRegion({
   diffSensitivity: 0.5,
   imageIgnoreThreshold: 0.1,
   carouselsEnabled: true,
-  bannersEnabled: false,
+  bannersEnabled: true,
   adsEnabled: true,
   diffIgnoreThreshold: 0.2
 }));
