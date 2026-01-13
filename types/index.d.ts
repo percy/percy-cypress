@@ -2,6 +2,8 @@
 /// <reference types="cypress"/>
 import { SnapshotOptions } from '@percy/core';
 
+export { createRegion } from '@percy/core';
+
 declare global {
   namespace Cypress {
     interface Chainable<Subject> {
