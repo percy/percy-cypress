@@ -12,7 +12,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "latest"
+    "tag": "beta"
   },
   "main": "index.js",
   "types": "types/index.d.ts",
