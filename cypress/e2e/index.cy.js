@@ -25,51 +25,22 @@ describe('percySnapshot', () => {
     cy.percySnapshot();
     cy.percySnapshot('Snapshot 2');
 
-    // Wait a moment for requests to be tracked
-    cy.wait(100);
-
-    cy.then(async () => {
-      // Fetch requests directly from the test endpoint
-      const requests = await helpers.get('requests');
-
-      // Filter snapshot requests
-      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
-
-      // Verify we have the expected number of snapshot requests
-      expect(snapshotRequests.length).to.be.at.least(2, 'Should have at least 2 snapshot requests');
-
-      // VERIFY: async=true parameter must be present in all snapshot request URLs
-      snapshotRequests.forEach((req) => {
-        // This is the KEY verification - async=true must be in the query string
-        expect(req.url).to.include('?async=true',
-          `async=true query parameter MUST be present in request URL: ${req.url}`);
-      });
-    });
+    cy.then(() => helpers.get('logs'))
+      .should('include', `Snapshot found: ${cy.state('runnable').fullTitle()}`)
+      .should('include', `- url: ${helpers.testSnapshotURL}`)
+      .should('include.match', /clientInfo: @percy\/cypress\/.+/)
+      .should('include.match', /environmentInfo: cypress\/.+/)
+      .should('include', 'Snapshot found: Snapshot 2');
   });
 
   it('works with with only options passed', () => {
     cy.percySnapshot({ enableJavascript: true });
 
-    // Wait a moment for requests to be tracked
-    cy.wait(100);
-
-    cy.then(async () => {
-      // Fetch requests directly from the test endpoint
-      const requests = await helpers.get('requests');
-
-      // Filter snapshot requests
-      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
-
-      // Verify we have at least one snapshot request
-      expect(snapshotRequests.length).to.be.at.least(1, 'Should have at least 1 snapshot request');
-
-      // VERIFY: async=true parameter must be present in snapshot request URL
-      snapshotRequests.forEach((req) => {
-        // This is the KEY verification - async=true must be in the query string
-        expect(req.url).to.include('?async=true',
-          `async=true query parameter MUST be present in request URL: ${req.url}`);
-      });
-    });
+    cy.then(() => helpers.get('logs'))
+      .should('include', `Snapshot found: ${cy.state('runnable').fullTitle()}`)
+      .should('include', `- url: ${helpers.testSnapshotURL}`)
+      .should('include.match', /clientInfo: @percy\/cypress\/.+/)
+      .should('include.match', /environmentInfo: cypress\/.+/);
   });
 
   it('handles snapshot failures', () => {
@@ -84,7 +55,7 @@ describe('percySnapshot', () => {
   });
 
   it('verifies async parameter is passed in snapshot requests', () => {
-    cy.percySnapshot('Async Verification Test');
+    cy.percySnapshot('Async Verification Test', { async: true });
 
     // Wait for request to be tracked
     cy.wait(100);
@@ -101,6 +72,63 @@ describe('percySnapshot', () => {
       snapshotRequests.forEach((req) => {
         expect(req.url).to.include('?async=true',
           `async=true parameter MUST be in URL: ${req.url}`
+        );
+      });
+    });
+  });
+
+  it('passes async parameter when options.async is true', () => {
+    cy.percySnapshot('Async True Test', { async: true });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.include('?async=true',
+          'async=true must be present when options.async is true'
+        );
+      });
+    });
+  });
+
+  it('does not pass async parameter when options.async is false', () => {
+    cy.percySnapshot('Async False Test', { async: false });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.not.include('?async=true',
+          'async=true must NOT be present when options.async is false'
+        );
+      });
+    });
+  });
+
+  it('does not pass async parameter when options.async is undefined', () => {
+    cy.percySnapshot('Async Undefined Test', { enableJavascript: true });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.not.include('?async=true',
+          'async=true must NOT be present when options.async is undefined'
         );
       });
     });

@@ -117,6 +117,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const _throw = throwConfig === undefined ? false : throwConfig;
 
         // Post the DOM snapshot to Percy
+        // Pass async parameter only if explicitly set to true in options
+        const postSnapshotParams = options.async === true ? { async: true } : undefined;
+
         let response = await withRetry(async () => await withLog(async () => {
           return await utils.postSnapshot({
             ...options,
@@ -125,7 +128,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
             domSnapshot,
             url: dom.URL,
             name
-          }, { async: true });
+          }, postSnapshotParams);
         }, 'posting dom snapshot', _throw));
 
         // Log the snapshot name on success
