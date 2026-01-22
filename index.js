@@ -125,7 +125,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
             domSnapshot,
             url: dom.URL,
             name
-          });
+          }, { async: true });
         }, 'posting dom snapshot', _throw));
 
         // Log the snapshot name on success
