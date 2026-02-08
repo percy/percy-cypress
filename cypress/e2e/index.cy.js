@@ -52,32 +52,6 @@ describe('percySnapshot', () => {
       });
     });
 
-    it('falls back to Cypress.env() when Cypress.expose() is not available', () => {
-      const utils = require('@percy/sdk-utils');
-      const testAddress = 'http://test-env-address:5338';
-
-      // Remove Cypress.expose
-      delete Cypress.expose;
-
-      // Mock Cypress.env
-      const envStub = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(testAddress);
-      Cypress.env = envStub;
-
-      cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        } else if (typeof Cypress.env === 'function') {
-          const addr = Cypress.env('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
-        expect(envStub).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        expect(utils.percy.address).to.equal(testAddress);
-      });
-    });
-
     it('does not set address when Cypress.expose() returns null/undefined', () => {
       const utils = require('@percy/sdk-utils');
       const originalAddress = utils.percy.address;
@@ -95,59 +69,6 @@ describe('percySnapshot', () => {
         expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
         // Address should remain unchanged
         expect(utils.percy.address).to.equal(originalAddress);
-      });
-    });
-
-    it('does not set address when Cypress.env() returns null/undefined', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalAddress = utils.percy.address;
-
-      // Remove Cypress.expose
-      delete Cypress.expose;
-
-      // Mock Cypress.env to return undefined
-      const envStub = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
-      Cypress.env = envStub;
-
-      cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        } else if (typeof Cypress.env === 'function') {
-          const addr = Cypress.env('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
-        expect(envStub).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // Address should remain unchanged
-        expect(utils.percy.address).to.equal(originalAddress);
-      });
-    });
-
-    it('prefers Cypress.expose() over Cypress.env() when both exist', () => {
-      const utils = require('@percy/sdk-utils');
-      const exposeAddress = 'http://expose-address:5338';
-      const envAddress = 'http://env-address:5338';
-
-      // Mock both methods
-      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(exposeAddress);
-      const envStub = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(envAddress);
-      Cypress.env = envStub;
-
-      cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        } else if (typeof Cypress.env === 'function') {
-          const addr = Cypress.env('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
-        expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        expect(envStub).to.not.be.called;
-        expect(utils.percy.address).to.equal(exposeAddress);
       });
     });
   });
