@@ -10,7 +10,16 @@ const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
 // Maybe set the CLI API address from the environment
-utils.percy.address = Cypress.env('PERCY_SERVER_ADDRESS');
+// Support both new and legacy methods for backward compatibility
+
+if (typeof Cypress.expose === 'function') {
+  // Prefer Cypress.expose() for public configuration in newer Cypress versions
+  const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
+  if (addr) utils.percy.address = addr;
+} else if (typeof Cypress.env === 'function') {
+  // Fall back to legacy Cypress.env() for backward compatibility
+  utils.percy.address = Cypress.env('PERCY_SERVER_ADDRESS');
+}
 
 // Use Cypress's http:request backend task
 utils.request.fetch = async function fetch(url, options) {
