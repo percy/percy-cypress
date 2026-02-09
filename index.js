@@ -15,7 +15,7 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 const getPercyServerAddress = () => {
   return (typeof Cypress.expose === 'function')
     ? Cypress.expose('PERCY_SERVER_ADDRESS')
-    : Cypress.env('PERCY_SERVER_ADDRESS');
+    : /* istanbul ignore next */ Cypress.env('PERCY_SERVER_ADDRESS');
 };
 utils.percy.address = getPercyServerAddress();
 
