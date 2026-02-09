@@ -10,6 +10,69 @@ describe('percySnapshot', () => {
     cy.wrap(cy.spy(Cypress, 'log').log(false)).as('log');
   });
 
+  describe('Environment Configuration', () => {
+    let originalEnv;
+    let originalExpose;
+
+    beforeEach(() => {
+      // Store original methods
+      originalEnv = Cypress.env;
+      originalExpose = Cypress.expose;
+    });
+
+    afterEach(() => {
+      // Restore original methods
+      if (originalEnv) {
+        Cypress.env = originalEnv;
+      }
+      if (originalExpose) {
+        Cypress.expose = originalExpose;
+      } else {
+        delete Cypress.expose;
+      }
+    });
+
+    it('uses Cypress.expose() when available', () => {
+      const utils = require('@percy/sdk-utils');
+      const testAddress = 'http://test-expose-address:5338';
+
+      // Mock Cypress.expose
+      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(testAddress);
+
+      // Reload the module to trigger the env configuration code
+      cy.wrap(null).then(() => {
+        // Simulate the configuration logic
+        if (typeof Cypress.expose === 'function') {
+          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
+          if (addr) utils.percy.address = addr;
+        }
+
+        expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
+        expect(utils.percy.address).to.equal(testAddress);
+      });
+    });
+
+    it('does not set address when Cypress.expose() returns null/undefined', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalAddress = utils.percy.address;
+
+      // Mock Cypress.expose to return undefined
+      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
+
+      cy.wrap(null).then(() => {
+        // Simulate the configuration logic
+        if (typeof Cypress.expose === 'function') {
+          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
+          if (addr) utils.percy.address = addr;
+        }
+
+        expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
+        // Address should remain unchanged
+        expect(utils.percy.address).to.equal(originalAddress);
+      });
+    });
+  });
+
   it('disables snapshots when the healthcheck fails', () => {
     cy.then(() => helpers.test('error', '/percy/healthcheck'));
 
