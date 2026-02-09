@@ -117,6 +117,86 @@ describe('percySnapshot', () => {
     ]);
   });
 
+  it('verifies async parameter is passed in snapshot requests', () => {
+    cy.percySnapshot('Async Verification Test', { async: true });
+
+    // Wait for request to be tracked
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+
+      // Filter snapshot requests
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1, 'Should have snapshot request');
+
+      // THE KEY ASSERTION: Verify async=true is in the URL
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.include('?async=true',
+          `async=true parameter MUST be in URL: ${req.url}`
+        );
+      });
+    });
+  });
+
+  it('passes async parameter when options.async is true', () => {
+    cy.percySnapshot('Async True Test', { async: true });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.include('?async=true',
+          'async=true must be present when options.async is true'
+        );
+      });
+    });
+  });
+
+  it('does not pass async parameter when options.async is false', () => {
+    cy.percySnapshot('Async False Test', { async: false });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.not.include('?async=true',
+          'async=true must NOT be present when options.async is false'
+        );
+      });
+    });
+  });
+
+  it('does not pass async parameter when options.async is undefined', () => {
+    cy.percySnapshot('Async Undefined Test', { enableJavascript: true });
+
+    cy.wait(100);
+
+    cy.then(async () => {
+      const requests = await helpers.get('requests');
+      const snapshotRequests = requests.filter(r => r.url.includes('/percy/snapshot'));
+
+      expect(snapshotRequests.length).to.be.at.least(1);
+
+      snapshotRequests.forEach((req) => {
+        expect(req.url).to.not.include('?async=true',
+          'async=true must NOT be present when options.async is undefined'
+        );
+      });
+    });
+  });
+
   describe('if percyThrowErrorOnFailure set to true', () => {
     let ogPercyThrowErrorOnFailure;
 
