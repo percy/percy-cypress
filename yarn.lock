@@ -31,7 +31,7 @@
   resolved "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.28.5.tgz"
   integrity sha512-6uFXyCayocRbqhZOB+6XcuZbkMNimwfVGFji8CTZnCzOHVGvDqzvitu1re2AU5LROliz7eQPhB8CpAMvnx9EjA==
 
-"@babel/core@^7.23.9", "@babel/core@^7.7.5":
+"@babel/core@^7.23.9":
   version "7.26.8"
   resolved "https://registry.npmjs.org/@babel/core/-/core-7.26.8.tgz"
   integrity sha512-l+lkXCHS6tQEc5oUpK28xBOZ6+HwaH7YwoYQbLFiYb4nS2/l1tKnZEtEWkD0GuiYdvArf9qBS0XlQGXzPMsNqQ==
@@ -172,10 +172,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.28.5"
 
-"@cypress/code-coverage@^3.14.7":
-  version "3.14.7"
-  resolved "https://registry.npmjs.org/@cypress/code-coverage/-/code-coverage-3.14.7.tgz"
-  integrity sha512-0qk2aNKmrB0AwJtYSyK2+MWl/3NqDgZQ1OBSEh6oFnJwl/H2u3NTatV+FTCap22HTm+uxUS6SarU8gP9gFZ6Tw==
+"@cypress/code-coverage@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@cypress/code-coverage/-/code-coverage-4.0.0.tgz#9db170f494184d7278b8768d8e628de7821a4aae"
+  integrity sha512-f91ZfRfblyUudFA2nu0Z0ZTmza/QGkDCwdbQoO8zEpAjq2laRysWHn8nqM/9dOeJjH5oGnd0sYdqaGe5G1yxBw==
   dependencies:
     "@cypress/webpack-preprocessor" "^6.0.0"
     chalk "4.1.2"
@@ -183,8 +183,8 @@
     debug "4.4.0"
     execa "4.1.0"
     istanbul-lib-coverage "^3.0.0"
-    js-yaml "4.1.0"
-    nyc "15.1.0"
+    js-yaml "^4.1.1"
+    nyc "^17.1.0"
     tinyglobby "^0.2.14"
 
 "@cypress/request@^3.0.10":
@@ -2758,16 +2758,6 @@ istanbul-lib-hook@^3.0.0:
   dependencies:
     append-transform "^2.0.0"
 
-istanbul-lib-instrument@^4.0.0:
-  version "4.0.3"
-  resolved "https://registry.npmjs.org/istanbul-lib-instrument/-/istanbul-lib-instrument-4.0.3.tgz"
-  integrity sha512-BXgQl9kf4WTCPCCpmFGoJkz/+uhvm7h7PFKUYxh7qarQd3ER33vHG//qaE8eN25l07YqZPpHXU9I09l/RD5aGQ==
-  dependencies:
-    "@babel/core" "^7.7.5"
-    "@istanbuljs/schema" "^0.1.2"
-    istanbul-lib-coverage "^3.0.0"
-    semver "^6.3.0"
-
 istanbul-lib-instrument@^6.0.2:
   version "6.0.3"
   resolved "https://registry.npmjs.org/istanbul-lib-instrument/-/istanbul-lib-instrument-6.0.3.tgz"
@@ -2846,13 +2836,6 @@ js-tokens@^4.0.0:
   resolved "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz"
   integrity sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==
 
-js-yaml@4.1.0, js-yaml@^4.1.0:
-  version "4.1.0"
-  resolved "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.0.tgz"
-  integrity sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==
-  dependencies:
-    argparse "^2.0.1"
-
 js-yaml@^3.13.1:
   version "3.14.1"
   resolved "https://registry.npmjs.org/js-yaml/-/js-yaml-3.14.1.tgz"
@@ -2860,6 +2843,13 @@ js-yaml@^3.13.1:
   dependencies:
     argparse "^1.0.7"
     esprima "^4.0.0"
+
+js-yaml@^4.1.0, js-yaml@^4.1.1:
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-4.1.1.tgz#854c292467705b699476e1a2decc0c8a3458806b"
+  integrity sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==
+  dependencies:
+    argparse "^2.0.1"
 
 jsbn@~0.1.0:
   version "0.1.1"
@@ -3223,39 +3213,6 @@ npm-run-path@^4.0.0:
   integrity sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==
   dependencies:
     path-key "^3.0.0"
-
-nyc@15.1.0:
-  version "15.1.0"
-  resolved "https://registry.npmjs.org/nyc/-/nyc-15.1.0.tgz"
-  integrity sha512-jMW04n9SxKdKi1ZMGhvUTHBN0EICCRkHemEoE5jm6mTYcqcdas0ATzgUgejlQUHMvpnOZqGB5Xxsv9KxJW1j8A==
-  dependencies:
-    "@istanbuljs/load-nyc-config" "^1.0.0"
-    "@istanbuljs/schema" "^0.1.2"
-    caching-transform "^4.0.0"
-    convert-source-map "^1.7.0"
-    decamelize "^1.2.0"
-    find-cache-dir "^3.2.0"
-    find-up "^4.1.0"
-    foreground-child "^2.0.0"
-    get-package-type "^0.1.0"
-    glob "^7.1.6"
-    istanbul-lib-coverage "^3.0.0"
-    istanbul-lib-hook "^3.0.0"
-    istanbul-lib-instrument "^4.0.0"
-    istanbul-lib-processinfo "^2.0.2"
-    istanbul-lib-report "^3.0.0"
-    istanbul-lib-source-maps "^4.0.0"
-    istanbul-reports "^3.0.2"
-    make-dir "^3.0.0"
-    node-preload "^0.2.1"
-    p-map "^3.0.0"
-    process-on-spawn "^1.0.0"
-    resolve-from "^5.0.0"
-    rimraf "^3.0.0"
-    signal-exit "^3.0.2"
-    spawn-wrap "^2.0.0"
-    test-exclude "^6.0.0"
-    yargs "^15.0.2"
 
 nyc@^17.1.0:
   version "17.1.0"
@@ -3849,7 +3806,7 @@ schema-utils@^4.3.0, schema-utils@^4.3.3:
   resolved "https://registry.npmjs.org/semver/-/semver-5.7.2.tgz"
   integrity sha512-cBznnQ9KjJqU67B52RMC65CMarK2600WFnbkcaiwWq3xy/5haFJlshgnpjovMVJ+Hff49d8GEn0b87C5pDQ10g==
 
-semver@^6.0.0, semver@^6.1.0, semver@^6.3.0, semver@^6.3.1:
+semver@^6.0.0, semver@^6.1.0, semver@^6.3.1:
   version "6.3.1"
   resolved "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz"
   integrity sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==
