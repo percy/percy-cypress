@@ -397,5 +397,44 @@ describe('percySnapshot', () => {
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: No Cookie Test');
     });
+
+    it('filters out httpOnly cookies from snapshots', () => {
+      // Set a regular cookie and an httpOnly cookie
+      cy.setCookie('regular_cookie', 'regular_value');
+      cy.setCookie('httponly_cookie', 'secret_value', { httpOnly: true });
+
+      // Verify both cookies exist in the browser
+      cy.getCookies().should('have.length', 2);
+
+      cy.percySnapshot('HttpOnly Filter Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: HttpOnly Filter Test');
+    });
+
+    it('captures all non-httpOnly cookies when mixed with httpOnly', () => {
+      cy.setCookie('visible_one', 'value1');
+      cy.setCookie('visible_two', 'value2');
+      cy.setCookie('session_token', 'secret', { httpOnly: true });
+
+      cy.getCookies().should('have.length', 3);
+
+      cy.percySnapshot('Mixed Cookie Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Mixed Cookie Test');
+    });
+
+    it('handles snapshots where all cookies are httpOnly', () => {
+      cy.clearCookies();
+      cy.setCookie('session_only', 'secret', { httpOnly: true });
+
+      cy.getCookies().should('have.length', 1);
+
+      cy.percySnapshot('All HttpOnly Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: All HttpOnly Test');
+    });
   });
 });

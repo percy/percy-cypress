@@ -114,10 +114,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
-      // Capture cookies
+      // Capture cookies (filter httpOnly to avoid CDN bypass and cookie accumulation)
       return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
-          domSnapshot.cookies = cookies;
+          let filtered = cookies.filter(c => !c.httpOnly);
+          if (filtered.length > 0) domSnapshot.cookies = filtered;
         }
 
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
