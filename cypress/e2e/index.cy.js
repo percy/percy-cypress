@@ -389,6 +389,22 @@ describe('percySnapshot', () => {
     });
   });
 
+  describe('Cross-Origin Iframe Processing', () => {
+    it('processes cross-origin iframes in snapshots', () => {
+      cy.percySnapshot('Cross-Origin Iframe Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Cross-Origin Iframe Test');
+    });
+
+    it('handles pages with no iframes gracefully', () => {
+      cy.percySnapshot('No Iframe Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Iframe Test');
+    });
+  });
+
   describe('New Feature Tests', () => {
     it('supports minHeight option', () => {
       cy.percySnapshot('Min Height Test', { minHeight: 2000 });

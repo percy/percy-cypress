@@ -35,6 +35,96 @@ function cylog(message, meta) {
   });
 }
 
+// URLs to skip when scanning for cross-origin iframes
+const SKIP_IFRAME_SRCS = [
+  'about:blank',
+  'about:srcdoc',
+  'javascript:',
+  'data:',
+  'vbscript:',
+  'blob:',
+  'chrome:',
+  'chrome-extension:'
+];
+
+// Process cross-origin iframes and attach serialized content to the snapshot
+async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
+  const log = utils.logger('cypress');
+
+  try {
+    const currentUrl = new URL(dom.URL);
+    const iframes = dom.querySelectorAll('iframe');
+    const processedFrames = [];
+
+    for (const iframe of iframes) {
+      const src = iframe.getAttribute('src');
+      const srcdoc = iframe.getAttribute('srcdoc');
+
+      // Skip non-processable iframes
+      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(prefix => src === prefix || src.startsWith(prefix))) {
+        continue;
+      }
+
+      try {
+        const frameUrl = new URL(src, currentUrl.href);
+
+        // Only process cross-origin iframes
+        if (frameUrl.origin === currentUrl.origin) continue;
+
+        // Get the percy element ID (set by PercyDOM.serialize on the parent)
+        const percyElementId = iframe.getAttribute('data-percy-element-id');
+        if (!percyElementId) {
+          log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
+          continue;
+        }
+
+        log.debug(`Processing cross-origin iframe: ${frameUrl.href}`);
+
+        // Try to access the iframe's content and serialize it
+        let iframeSnapshot = null;
+        try {
+          const frameWindow = iframe.contentWindow;
+          const frameDocument = iframe.contentDocument || frameWindow?.document;
+
+          if (frameDocument) {
+            // Same-origin accessible (e.g., sandboxed but accessible) — inject and serialize
+            // eslint-disable-next-line no-eval
+            frameWindow.eval(percyDOMScript);
+            iframeSnapshot = frameWindow.PercyDOM.serialize({
+              ...options,
+              enableJavaScript: true
+            });
+          }
+        } catch (accessError) {
+          // Cross-origin security error — expected for true CORS iframes
+          // The Percy CLI will handle these via its own discovery mechanism
+          log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
+
+          // Still record the frame metadata so Percy CLI knows about it
+          iframeSnapshot = null;
+        }
+
+        processedFrames.push({
+          iframeData: { percyElementId },
+          iframeSnapshot,
+          frameUrl: frameUrl.href
+        });
+
+        log.debug(`Captured cross-origin iframe: ${frameUrl.href} (snapshot: ${!!iframeSnapshot})`);
+      } catch (e) {
+        log.debug(`Skipping iframe "${src}": ${e.message}`);
+      }
+    }
+
+    if (processedFrames.length > 0) {
+      domSnapshot.corsIframes = processedFrames;
+      log.debug(`Attached ${processedFrames.length} cross-origin iframe(s) to snapshot`);
+    }
+  } catch (e) {
+    log.debug(`Error during cross-origin iframe processing: ${e.message}`);
+  }
+}
+
 // Check if responsive DOM capture should be used
 function isResponsiveDOMCaptureValid(options) {
   if (utils.percy?.config?.percy?.deferUploads) {
@@ -229,6 +319,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       // Check if responsive capture is requested
       const useResponsive = isResponsiveDOMCaptureValid(options);
 
+      // Fetch PercyDOM script for cross-origin iframe injection
+      const percyDOMScript = await utils.fetchPercyDOM();
+
       /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
         if (useResponsive) {
@@ -236,6 +329,18 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         }
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
+
+      // Process cross-origin iframes (parity with Selenium/Playwright)
+      await withLog(async () => {
+        if (Array.isArray(domSnapshot)) {
+          // Responsive mode — process iframes for each width snapshot
+          for (const snap of domSnapshot) {
+            await processCrossOriginIframes(dom, snap, options, percyDOMScript);
+          }
+        } else {
+          await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
+        }
+      }, 'processing cross-origin iframes', false);
 
       // Capture cookies (for non-responsive, or attach to each responsive snapshot)
       return cy.getCookies({ log: false }).then(async (cookies) => {

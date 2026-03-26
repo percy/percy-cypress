@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clunky Responsive Site</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        #nav { padding: 20px; border: 2px solid #333; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>My Clunky Website</h1>
+    <p>This menu only changes if you refresh the page at a different size.</p>
+    
+    <div id="nav">Loading...</div>
+
+    <script>
+        // This script runs strictly ONCE when the page loads.
+        // Simply resizing the browser window later will NOT trigger this again.
+        window.onload = function() {
+            const nav = document.getElementById("nav");
+            
+            if (window.innerWidth >= 768) {
+                nav.innerHTML = "<h2>🖥️ Massive Desktop Menu</h2><p>Home | About | Services | Products | Careers | Contact</p>";
+                nav.style.backgroundColor = "lightblue";
+            } else {
+                nav.innerHTML = "<h2>📱 Mobile Menu</h2><p>☰ Tap Here</p>";
+                nav.style.backgroundColor = "lightgreen";
+            }
+        };
+    </script>
+</body>
+</html>

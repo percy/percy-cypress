@@ -91,20 +91,64 @@ describe('Percy Snapshot with Custom HTML Fixtures', () => {
   });
 
   describe('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', () => {
-    it('captures responsive snapshots with page reload between widths', () => {
-      cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
-      cy.get('.card-grid').should('be.visible');
+    it('captures different layouts at different widths with page reload', () => {
+      // This page uses window.onload to set layout based on width.
+      // WITHOUT reload, resizing alone won't change the content.
+      // WITH reload, each width gets the correct layout.
+      cy.visit(`${FIXTURE_URL}/reload-test.html`);
+      cy.get('#nav').should('be.visible');
 
-      // Set the env var to trigger page reload between captures
       Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
 
-      cy.percySnapshot('Responsive with Page Reload', {
+      cy.percySnapshot('Reload Test - Desktop vs Mobile Menu', {
         responsiveSnapshotCapture: true,
         widths: [1280, 375]
       });
 
-      // Clean up env var
       Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+    });
+
+    it('captures responsive snapshots with reload on responsive page', () => {
+      cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
+      cy.get('.card-grid').should('be.visible');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+
+      cy.percySnapshot('Reload Test - Responsive Grid', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375]
+      });
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+    });
+  });
+
+  describe('Cross-Origin Iframe Processing', () => {
+    it('detects and processes cross-origin iframes', () => {
+      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`);
+      cy.get('.cross-origin-frame').should('have.length', 2);
+
+      cy.percySnapshot('Cross-Origin Iframe Page');
+    });
+
+    it('captures cross-origin iframes alongside responsive capture', { defaultCommandTimeout: 60000 }, () => {
+      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`);
+      cy.get('.cross-origin-frame').should('have.length', 2);
+
+      cy.percySnapshot('Cross-Origin Iframe - Responsive', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375]
+      });
+    });
+
+    it('skips about:blank, srcdoc, and data: iframes', () => {
+      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`);
+
+      // These iframes should exist but NOT be processed as cross-origin
+      cy.get('iframe[src="about:blank"]').should('exist');
+      cy.get('iframe[srcdoc]').should('exist');
+
+      cy.percySnapshot('Cross-Origin Iframe - Skip Filters');
     });
   });
 
