@@ -138,6 +138,47 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
+// Reload the page and wait for it to be ready.
+// Uses a marker element to detect when the NEW page has fully loaded.
+async function reloadAndWait(percyDOMScript, timeout = 5000) {
+  const log = utils.logger('cypress');
+
+  // Save the current URL for navigation
+  const currentURL = window.location.href;
+
+  // Set a marker to detect the reload completed
+  window.__percy_pre_reload = true;
+
+  // Navigate to the same URL (triggers full page reload)
+  window.location.href = currentURL;
+
+  // Poll until the page has reloaded (marker is gone = new page)
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    // After reload, the marker will be undefined on the new page
+    if (!window.__percy_pre_reload) {
+      // Page has reloaded — wait a bit more for DOM to settle
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Re-inject PercyDOM on the new page
+      try {
+        // eslint-disable-next-line no-eval
+        eval(percyDOMScript);
+        log.debug('PercyDOM re-injected after page reload');
+      } catch (e) {
+        log.error(`Failed to re-inject PercyDOM after reload: ${e.message}`);
+      }
+      return true;
+    }
+  }
+
+  // If we got here, the page didn't reload within timeout
+  // This can happen in Cypress's sandboxed environment
+  log.debug('Page reload did not complete within timeout — continuing without reload');
+  return false;
+}
+
 // Capture responsive DOM snapshots across different widths
 async function captureResponsiveDOM(dom, options) {
   if (!utils.getResponsiveWidths) {
@@ -198,19 +239,13 @@ async function captureResponsiveDOM(dom, options) {
 
       // Reload page between captures if configured (parity with Playwright/Selenium)
       if (shouldReloadPage) {
-        // Reload the current page
-        window.location.reload();
-        // Wait for page to be ready after reload
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Re-inject PercyDOM after reload (it was lost when the page reloaded)
-        // eslint-disable-next-line no-eval
-        eval(percyDOMScript);
-
-        // Re-setup resize listener and reset counter
-        /* istanbul ignore next: no instrumenting injected code */
-        window.PercyDOM.waitForResize();
-        resizeCount = 0;
+        const reloaded = await reloadAndWait(percyDOMScript);
+        if (reloaded) {
+          // Re-setup resize listener and reset counter on the new page
+          /* istanbul ignore next: no instrumenting injected code */
+          window.PercyDOM.waitForResize();
+          resizeCount = 0;
+        }
       }
 
       // Optional sleep between captures
@@ -219,8 +254,10 @@ async function captureResponsiveDOM(dom, options) {
       }
 
       // Serialize DOM at this width
+      // Use window.document (not the original dom param) because the page may have reloaded
       /* istanbul ignore next: no instrumenting injected code */
-      let domSnapshot = window.PercyDOM.serialize({ ...options, dom });
+      const currentDoc = shouldReloadPage ? window.document : dom;
+      let domSnapshot = window.PercyDOM.serialize({ ...options, dom: currentDoc });
       domSnapshot.width = width;
       domSnapshots.push(domSnapshot);
     }
