@@ -173,34 +173,39 @@ function captureResponsiveDOMWithCypress(options) {
     const originalWidth = Cypress.config('viewportWidth');
     const originalHeight = Cypress.config('viewportHeight');
 
-    // Chain: for each width, resize → (optionally reload) → inject PercyDOM → serialize
+    // Chain: for each width, resize → (optionally reload via visit) → inject PercyDOM → serialize
     let chain = cy.wrap(null, { log: false });
 
     for (const { width, height: configHeight } of widthHeights) {
       const targetHeight = configHeight || defaultHeight;
 
+      // Step 1: Set viewport FIRST (before any page load)
       chain = chain.then(() => {
-        // Resize viewport using Cypress's native command (actually changes the browser size)
         return cy.viewport(width, targetHeight, { log: false });
       });
 
-      // Optional sleep after resize
+      // Step 2: Reload page if configured
+      // Use cy.url() → cy.visit() instead of cy.reload() to guarantee
+      // the page loads fresh at the current viewport width.
+      // The page's window.onload sees the correct window.innerWidth.
+      if (shouldReloadPage) {
+        chain = chain.then(() => {
+          return cy.url({ log: false }).then((currentUrl) => {
+            return cy.visit(currentUrl, { log: false });
+          });
+        });
+      }
+
+      // Step 3: Optional sleep after resize/reload
       if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
         chain = chain.then(() => cy.wait(sleepSeconds * 1000, { log: false }));
       }
 
-      // Reload page if configured
-      if (shouldReloadPage) {
-        chain = chain.then(() => cy.reload({ log: false }));
-      }
-
-      // Inject PercyDOM and serialize at this width
+      // Step 4: Inject PercyDOM and serialize at this width
       chain = chain.then({ timeout: CY_TIMEOUT }, async () => {
-        // Re-inject PercyDOM (may have been lost on reload, or need fresh state)
-        if (!window.PercyDOM) {
-          // eslint-disable-next-line no-eval
-          eval(await utils.fetchPercyDOM());
-        }
+        // Always re-inject PercyDOM (lost on reload, or may need fresh state after resize)
+        // eslint-disable-next-line no-eval
+        eval(await utils.fetchPercyDOM());
       }).then(() => {
         return cy.document({ log: false }).then((doc) => {
           /* istanbul ignore next: no instrumenting injected code */
