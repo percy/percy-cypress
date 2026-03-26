@@ -12,7 +12,9 @@ const PORT = 8000;
 const FIXTURES_DIR = path.join(__dirname, 'cypress', 'fixtures', 'html');
 
 const server = http.createServer((req, res) => {
-  const filePath = path.join(FIXTURES_DIR, req.url === '/' ? 'standard-snapshot.html' : req.url);
+  // Strip query params before resolving file path
+  const urlPath = new URL(req.url, `http://localhost:${PORT}`).pathname;
+  const filePath = path.join(FIXTURES_DIR, urlPath === '/' ? 'standard-snapshot.html' : urlPath);
 
   if (!filePath.startsWith(FIXTURES_DIR)) {
     res.writeHead(403);
