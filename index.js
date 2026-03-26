@@ -72,15 +72,16 @@ async function captureResponsiveDOM(dom, options) {
     defaultHeight = options.minHeight || utils.percy?.config?.snapshot?.minHeight || currentHeight;
   }
 
-  // Log once if page reload is not supported
-  if (Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true') {
-    utils.logger('cypress').debug('Page reload during responsive capture is not supported in Cypress');
-  }
+  // Check if page should be reloaded between responsive captures
+  const shouldReloadPage = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
   // Read sleep time once before the loop (not per-iteration)
   const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
                        Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
   const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
+
+  // Cache the PercyDOM script for re-injection after reloads
+  const percyDOMScript = shouldReloadPage ? await utils.fetchPercyDOM() : null;
 
   try {
     for (let { width, height } of widthHeights) {
@@ -102,6 +103,23 @@ async function captureResponsiveDOM(dom, options) {
         }
         lastWindowWidth = width;
         lastWindowHeight = height;
+      }
+
+      // Reload page between captures if configured (parity with Playwright/Selenium)
+      if (shouldReloadPage) {
+        // Reload the current page
+        window.location.reload();
+        // Wait for page to be ready after reload
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Re-inject PercyDOM after reload (it was lost when the page reloaded)
+        // eslint-disable-next-line no-eval
+        eval(percyDOMScript);
+
+        // Re-setup resize listener and reset counter
+        /* istanbul ignore next: no instrumenting injected code */
+        window.PercyDOM.waitForResize();
+        resizeCount = 0;
       }
 
       // Optional sleep between captures
