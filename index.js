@@ -50,7 +50,6 @@ function isResponsiveDOMCaptureValid(options) {
 
 // Capture responsive DOM snapshots across different widths
 async function captureResponsiveDOM(dom, options) {
-  // Require getResponsiveWidths from sdk-utils (available in @percy/cli 1.31.10+)
   if (!utils.getResponsiveWidths) {
     throw new Error('Update Percy CLI to the latest version to use responsiveSnapshotCapture');
   }
