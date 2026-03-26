@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Percy Responsive Capture Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+    .header {
+      background: #6366f1;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .viewport-indicator {
+      background: #1e1b4b;
+      color: #a5b4fc;
+      padding: 10px;
+      text-align: center;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .viewport-indicator::after {
+      content: "Width: " attr(data-width) "px";
+    }
+
+    /* Grid that changes layout at different widths */
+    .card-grid {
+      display: grid;
+      gap: 16px;
+      padding: 20px;
+    }
+
+    /* Desktop: 3 columns */
+    @media (min-width: 1024px) {
+      .card-grid { grid-template-columns: repeat(3, 1fr); }
+      .viewport-indicator { background: #1e3a5f; }
+      .viewport-indicator::after { content: "Desktop Layout (3 cols) — width > 1024px"; }
+    }
+
+    /* Tablet: 2 columns */
+    @media (min-width: 600px) and (max-width: 1023px) {
+      .card-grid { grid-template-columns: repeat(2, 1fr); }
+      .viewport-indicator { background: #1e3a1e; }
+      .viewport-indicator::after { content: "Tablet Layout (2 cols) — 600px-1023px"; }
+    }
+
+    /* Mobile: 1 column */
+    @media (max-width: 599px) {
+      .card-grid { grid-template-columns: 1fr; }
+      .viewport-indicator { background: #5f1e1e; }
+      .viewport-indicator::after { content: "Mobile Layout (1 col) — width < 600px"; }
+    }
+
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .card-image {
+      height: 150px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+    }
+
+    .card:nth-child(1) .card-image { background: #fef3c7; }
+    .card:nth-child(2) .card-image { background: #dbeafe; }
+    .card:nth-child(3) .card-image { background: #dcfce7; }
+    .card:nth-child(4) .card-image { background: #fce7f3; }
+    .card:nth-child(5) .card-image { background: #e0e7ff; }
+    .card:nth-child(6) .card-image { background: #fed7aa; }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #1e293b;
+    }
+
+    .card-text {
+      font-size: 14px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    /* Sidebar that hides on mobile */
+    .layout {
+      display: flex;
+    }
+
+    .sidebar {
+      width: 250px;
+      background: #f8fafc;
+      border-right: 1px solid #e2e8f0;
+      padding: 20px;
+      min-height: 200px;
+    }
+
+    .sidebar-title {
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #334155;
+    }
+
+    .sidebar-item {
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      color: #475569;
+      font-size: 14px;
+    }
+
+    .sidebar-item:hover { background: #e2e8f0; }
+    .sidebar-item.active { background: #6366f1; color: white; }
+
+    .main-content { flex: 1; }
+
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        min-height: auto;
+      }
+    }
+
+    /* Navigation that collapses */
+    .nav {
+      display: flex;
+      gap: 16px;
+      padding: 12px 20px;
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .nav-item {
+      padding: 8px 16px;
+      border-radius: 6px;
+      color: #475569;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 599px) {
+      .nav {
+        flex-direction: column;
+        gap: 4px;
+      }
+      .nav-item {
+        width: 100%;
+        text-align: center;
+        background: #e2e8f0;
+      }
+    }
+
+    .footer {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Percy Responsive Capture Test</h1>
+    <p>This page has distinct layouts at desktop, tablet, and mobile widths</p>
+  </div>
+
+  <div class="viewport-indicator" id="viewport-indicator"></div>
+
+  <div class="nav">
+    <div class="nav-item">Dashboard</div>
+    <div class="nav-item">Projects</div>
+    <div class="nav-item">Snapshots</div>
+    <div class="nav-item">Settings</div>
+    <div class="nav-item">Help</div>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-title">Filters</div>
+      <div class="sidebar-item active">All Snapshots</div>
+      <div class="sidebar-item">Approved</div>
+      <div class="sidebar-item">Unreviewed</div>
+      <div class="sidebar-item">Changes Requested</div>
+    </div>
+
+    <div class="main-content">
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-image">📸</div>
+          <div class="card-body">
+            <div class="card-title">Homepage Snapshot</div>
+            <div class="card-text">Visual diff detected: Header layout shifted 2px. Review required before approval.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-image">🎨</div>
+          <div class="card-body">
+            <div class="card-title">Dashboard View</div>
+            <div class="card-text">No changes detected. Baseline matches current snapshot perfectly.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-image">📊</div>
+          <div class="card-body">
+            <div class="card-title">Analytics Page</div>
+            <div class="card-text">New snapshot captured. Chart rendering updated with new data points.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-image">⚙️</div>
+          <div class="card-body">
+            <div class="card-title">Settings Panel</div>
+            <div class="card-text">Form layout changed: Toggle switches replaced with checkboxes.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-image">👤</div>
+          <div class="card-body">
+            <div class="card-title">Profile Page</div>
+            <div class="card-text">Avatar component updated. Border radius changed from 50% to 8px.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-image">🔔</div>
+          <div class="card-body">
+            <div class="card-title">Notifications</div>
+            <div class="card-text">Notification badge added. Red dot indicator on unread items.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Percy Visual Testing — Responsive Capture Test Fixture — Grid: 3col→2col→1col | Sidebar: side→top | Nav: row→column
+  </div>
+
+  <script>
+    // Show current viewport width dynamically
+    function updateViewport() {
+      document.getElementById('viewport-indicator').setAttribute('data-width', window.innerWidth);
+    }
+    window.addEventListener('resize', updateViewport);
+    updateViewport();
+  </script>
+</body>
+</html>

@@ -338,6 +338,57 @@ describe('percySnapshot', () => {
     expect(region.configuration).to.have.property('adsEnabled', true);
   });
 
+  describe('Responsive Snapshot Capture', () => {
+    it('supports responsiveSnapshotCapture option', () => {
+      cy.percySnapshot('Responsive Capture Test', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Capture Test');
+    });
+
+    it('supports responsive_snapshot_capture snake_case option', () => {
+      cy.percySnapshot('Responsive Snake Case Test', {
+        responsive_snapshot_capture: true,
+        widths: [1024, 768]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Snake Case Test');
+    });
+
+    it('falls back to normal capture when responsiveSnapshotCapture is false', () => {
+      cy.percySnapshot('Non-Responsive Test', {
+        responsiveSnapshotCapture: false
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Non-Responsive Test');
+    });
+
+    it('captures responsive snapshots with default widths when none specified', () => {
+      cy.percySnapshot('Responsive Default Widths', {
+        responsiveSnapshotCapture: true
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Default Widths');
+    });
+
+    it('captures responsive snapshots with minHeight option', () => {
+      cy.percySnapshot('Responsive With MinHeight', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375],
+        minHeight: 2000
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive With MinHeight');
+    });
+  });
+
   describe('New Feature Tests', () => {
     it('supports minHeight option', () => {
       cy.percySnapshot('Min Height Test', { minHeight: 2000 });
