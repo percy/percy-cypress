@@ -80,8 +80,9 @@ async function captureResponsiveDOM(dom, options) {
                        Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
   const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
 
-  // Cache the PercyDOM script for re-injection after reloads
-  const percyDOMScript = shouldReloadPage ? await utils.fetchPercyDOM() : null;
+  // Fetch PercyDOM script once upfront (parity with Playwright line 193-194)
+  // Used for re-injection after page reloads and as a fallback
+  const percyDOMScript = await utils.fetchPercyDOM();
 
   try {
     for (let { width, height } of widthHeights) {

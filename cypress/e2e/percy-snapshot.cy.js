@@ -90,6 +90,24 @@ describe('Percy Snapshot with Custom HTML Fixtures', () => {
     });
   });
 
+  describe('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', () => {
+    it('captures responsive snapshots with page reload between widths', () => {
+      cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
+      cy.get('.card-grid').should('be.visible');
+
+      // Set the env var to trigger page reload between captures
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+
+      cy.percySnapshot('Responsive with Page Reload', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375]
+      });
+
+      // Clean up env var
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+    });
+  });
+
   describe('Non-responsive fallback', () => {
     it('takes a normal snapshot when responsiveSnapshotCapture is false', () => {
       cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
