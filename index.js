@@ -60,18 +60,14 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
 
-      // Skip non-processable iframes
       if (!src || srcdoc || SKIP_IFRAME_SRCS.some(prefix => src === prefix || src.startsWith(prefix))) {
         continue;
       }
 
       try {
         const frameUrl = new URL(src, currentUrl.href);
-
-        // Only process cross-origin iframes
         if (frameUrl.origin === currentUrl.origin) continue;
 
-        // Get the percy element ID (set by PercyDOM.serialize on the parent)
         const percyElementId = iframe.getAttribute('data-percy-element-id');
         if (!percyElementId) {
           log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
@@ -80,14 +76,12 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
 
         log.debug(`Processing cross-origin iframe: ${frameUrl.href}`);
 
-        // Try to access the iframe's content and serialize it
         let iframeSnapshot = null;
         try {
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
 
           if (frameDocument) {
-            // Same-origin accessible (e.g., sandboxed but accessible) — inject and serialize
             // eslint-disable-next-line no-eval
             frameWindow.eval(percyDOMScript);
             iframeSnapshot = frameWindow.PercyDOM.serialize({
@@ -96,11 +90,7 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
             });
           }
         } catch (accessError) {
-          // Cross-origin security error — expected for true CORS iframes
-          // The Percy CLI will handle these via its own discovery mechanism
           log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
-
-          // Still record the frame metadata so Percy CLI knows about it
           iframeSnapshot = null;
         }
 
@@ -125,24 +115,27 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
   }
 }
 
-// Take a DOM snapshot and post it to the snapshot endpoint
-Cypress.Commands.add('percySnapshot', (name, options = {}) => {
-  let log = utils.logger('cypress');
+// Check if responsive snapshot capture with reload is requested
+function shouldDoResponsiveReload(options) {
+  const hasResponsiveFlag = (
+    options?.responsive_snapshot_capture ||
+    options?.responsiveSnapshotCapture ||
+    utils.percy?.config?.snapshot?.responsiveSnapshotCapture ||
+    false
+  );
+  const hasReloadFlag = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+  return hasResponsiveFlag && hasReloadFlag;
+}
 
-  // if name is not passed
-  if (typeof name === 'object') {
-    options = name;
-    name = undefined;
-  }
-  // Default name to test title
-  name = name || cy.state('runnable').fullTitle();
-
-  const meta = {
-    snapshot: {
-      name: name,
-      testCase: options.testCase
-    }
-  };
+/**
+ * Take a single DOM snapshot at the CURRENT viewport size and post it to Percy.
+ * This is the core snapshot logic — no viewport changes, no reload.
+ * Used by both the standard path and the responsive-reload loop.
+ *
+ * Returns a Cypress chainable.
+ */
+function takeSingleSnapshot(name, options, meta) {
+  const log = utils.logger('cypress');
 
   const withLog = async (func, context, _throw = true) => {
     try {
@@ -175,33 +168,13 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
+  // Inject PercyDOM if needed, then serialize, then post
   return cy.then({ timeout: CY_TIMEOUT }, async () => {
-    if (Cypress.config('isInteractive') &&
-        !Cypress.config('enablePercyInteractiveMode')) {
-      return cylog('Disabled in interactive mode', {
-        details: 'use "cypress run" instead of "cypress open"',
-        name
-      });
+    if (!window.PercyDOM) {
+      // eslint-disable-next-line no-eval
+      eval(await utils.fetchPercyDOM());
     }
-
-    // Check if Percy is enabled
-    if (!await utils.isPercyEnabled()) {
-      return cylog('Not running', { name });
-    }
-
-    await withLog(async () => {
-      // Inject @percy/dom
-      if (!window.PercyDOM) {
-        // eslint-disable-next-line no-eval
-        eval(await utils.fetchPercyDOM());
-      }
-    }, 'injecting @percy/dom');
-
-    // Serialize and capture the DOM
-    // Note: For responsiveSnapshotCapture, the SDK sends a SINGLE DOM snapshot
-    // with the responsiveSnapshotCapture flag. Percy CLI handles the multi-width
-    // capture, viewport resizing, and page reload during asset discovery
-    // (see cli/packages/core/src/discovery.js line 313-333).
+  }).then(() => {
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       const percyDOMScript = await utils.fetchPercyDOM();
 
@@ -239,6 +212,108 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         return response;
       });
     });
+  });
+}
+
+// Take a DOM snapshot and post it to the snapshot endpoint
+Cypress.Commands.add('percySnapshot', (name, options = {}) => {
+  // if name is not passed
+  if (typeof name === 'object') {
+    options = name;
+    name = undefined;
+  }
+  // Default name to test title
+  name = name || cy.state('runnable').fullTitle();
+
+  const meta = {
+    snapshot: {
+      name: name,
+      testCase: options.testCase
+    }
+  };
+
+  // Phase 1: Check preconditions
+  return cy.then({ timeout: CY_TIMEOUT }, async () => {
+    if (Cypress.config('isInteractive') &&
+        !Cypress.config('enablePercyInteractiveMode')) {
+      return cylog('Disabled in interactive mode', {
+        details: 'use "cypress run" instead of "cypress open"',
+        name
+      });
+    }
+
+    if (!await utils.isPercyEnabled()) {
+      return cylog('Not running', { name });
+    }
+
+    // Signal that preconditions passed
+    window.__percyReady = true;
+  }).then(() => {
+    if (!window.__percyReady) return;
+    window.__percyReady = false;
+
+    // Phase 2: Check if responsive-reload capture is needed
+    // When responsiveSnapshotCapture + PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE are both true,
+    // we need to take a SEPARATE snapshot at each width with a page reload between them.
+    // This is because JS-driven responsive pages (like window.onload layouts) need
+    // the page to actually reload at each viewport size.
+    //
+    // We handle this with PURE Cypress command chaining — no async/await mixing:
+    //   cy.viewport(w) → cy.visit(url) → takeSingleSnapshot() → repeat for next width
+    //
+    // For CSS-only responsive pages (no reload needed), responsiveSnapshotCapture
+    // is just passed through to Percy CLI which handles multi-width rendering itself.
+
+    if (shouldDoResponsiveReload(options)) {
+      // --- Responsive + Reload path ---
+      // Takes separate snapshots per width using Cypress commands.
+      const widths = options.widths || [Cypress.config('viewportWidth')];
+      const originalWidth = Cypress.config('viewportWidth');
+      const originalHeight = Cypress.config('viewportHeight');
+
+      const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
+                           Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+      const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
+
+      let chain = cy.wrap(null, { log: false });
+
+      for (const width of widths) {
+        const w = width; // capture for closure
+
+        // Step 1: Resize viewport
+        chain = chain.then(() => cy.viewport(w, originalHeight, { log: false }));
+
+        // Step 2: Reload page at new viewport width
+        chain = chain.then(() => {
+          return cy.url({ log: false }).then((currentUrl) => {
+            const url = new URL(currentUrl);
+            url.searchParams.set('_percy_w', `${w}`);
+            return cy.visit(url.toString(), { log: false });
+          });
+        });
+
+        // Step 3: Optional sleep
+        if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
+          chain = chain.then(() => cy.wait(sleepSeconds * 1000, { log: false }));
+        }
+
+        // Step 4: Take a single snapshot at this width
+        // Pass widths: [w] so Percy renders at exactly this width
+        chain = chain.then(() => {
+          return takeSingleSnapshot(name, { ...options, widths: [w] }, meta);
+        });
+      }
+
+      // Restore original viewport
+      chain = chain.then(() => cy.viewport(originalWidth, originalHeight, { log: false }));
+
+      return chain;
+    }
+
+    // --- Standard path (including CSS-only responsive) ---
+    // For responsiveSnapshotCapture without reload, just pass the flag through.
+    // Percy CLI handles multi-width rendering via CSS during asset discovery.
+    return takeSingleSnapshot(name, options, meta);
   });
 });
 
