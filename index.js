@@ -125,20 +125,21 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
   }
 }
 
-// Check if responsive DOM capture should be used
-function isResponsiveDOMCaptureValid(options) {
-  if (utils.percy?.config?.percy?.deferUploads) {
-    return false;
-  }
-  return (
+// Check if responsive snapshot capture with page reload is needed.
+// When true, the SDK sends the snapshot WITHOUT domSnapshot so Percy CLI
+// navigates to the URL itself, resizes, and reloads at each width.
+function shouldDoResponsiveReload(options) {
+  const hasResponsiveFlag = (
     options?.responsive_snapshot_capture ||
     options?.responsiveSnapshotCapture ||
     utils.percy?.config?.snapshot?.responsiveSnapshotCapture ||
     false
   );
+  const hasReloadFlag = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+  return hasResponsiveFlag && hasReloadFlag;
 }
 
-// Capture responsive DOM snapshots across different widths
+// eslint-disable-next-line no-unused-vars
 async function captureResponsiveDOM(dom, options) {
   if (!utils.getResponsiveWidths) {
     throw new Error('Update Percy CLI to the latest version to use responsiveSnapshotCapture');
@@ -314,43 +315,61 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
     }, 'injecting @percy/dom');
 
+    // Check if responsive capture with reload is needed
+    const useResponsiveReload = shouldDoResponsiveReload(options);
+
+    if (useResponsiveReload) {
+      // =====================================================================
+      // RESPONSIVE + RELOAD PATH
+      //
+      // Don't send domSnapshot — let Percy CLI handle everything:
+      // 1. CLI navigates to the URL (discovery.js:286)
+      // 2. CLI resizes at each width (discovery.js:332)
+      // 3. CLI reloads the page at each width (discovery.js:333)
+      // 4. CLI captures DOM and discovers assets
+      //
+      // The SDK just sends: url + name + options (including
+      // responsiveSnapshotCapture: true and widths)
+      // =====================================================================
+      return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
+        const throwConfig = Cypress.config('percyThrowErrorOnFailure');
+        const _throw = throwConfig === undefined ? false : throwConfig;
+
+        let response = await withRetry(async () => await withLog(async () => {
+          return await utils.postSnapshot({
+            ...options,
+            environmentInfo: ENV_INFO,
+            clientInfo: CLIENT_INFO,
+            // NO domSnapshot — Percy CLI navigates to the URL and captures itself
+            url: dom.URL,
+            name
+          });
+        }, 'posting snapshot (CLI-handled responsive)', _throw));
+
+        cylog(name, meta);
+        return response;
+      });
+    }
+
+    // --- Standard path (non-responsive or CSS-only responsive) ---
     // Serialize and capture the DOM
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
-      // Check if responsive capture is requested
-      const useResponsive = isResponsiveDOMCaptureValid(options);
-
-      // Fetch PercyDOM script for cross-origin iframe injection
       const percyDOMScript = await utils.fetchPercyDOM();
 
       /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
-        if (useResponsive) {
-          return captureResponsiveDOM(dom, options);
-        }
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
-      // Process cross-origin iframes (parity with Selenium/Playwright)
+      // Process cross-origin iframes
       await withLog(async () => {
-        if (Array.isArray(domSnapshot)) {
-          // Responsive mode — process iframes for each width snapshot
-          for (const snap of domSnapshot) {
-            await processCrossOriginIframes(dom, snap, options, percyDOMScript);
-          }
-        } else {
-          await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
-        }
+        await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
       }, 'processing cross-origin iframes', false);
 
-      // Capture cookies (for non-responsive, or attach to each responsive snapshot)
+      // Capture cookies
       return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
-          if (Array.isArray(domSnapshot)) {
-            // Responsive mode — attach cookies to each snapshot
-            domSnapshot.forEach(snap => { snap.cookies = cookies; });
-          } else {
-            domSnapshot.cookies = cookies;
-          }
+          domSnapshot.cookies = cookies;
         }
 
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
@@ -368,9 +387,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           });
         }, 'posting dom snapshot', _throw));
 
-        // Log the snapshot name on success
         cylog(name, meta);
-
         return response;
       });
     });
