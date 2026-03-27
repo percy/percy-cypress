@@ -14,7 +14,8 @@ describe('Responsive Reload via CLI', () => {
       responsiveSnapshotCapture: true,
       widths: [1280, 375]
     });
-    Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+    // Clean up AFTER the snapshot command executes, not synchronously
+    cy.then(() => Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined));
   });
 
   it('CSS responsive: standard path with domSnapshot', () => {
