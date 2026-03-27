@@ -1,38 +1,38 @@
 const FIXTURE_URL = 'http://localhost:8000';
 
 describe('Responsive Reload Capture', () => {
-  it('JS-driven page: shows Desktop at 1280 and Mobile at 375 with reload', () => {
-    // reload-test.html uses window.onload to set layout based on width.
-    // Without reload, resizing alone won't change the content.
-    // With PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE=true, each width gets
-    // a separate cy.viewport() + cy.visit() + percySnapshot() cycle.
+  it('verifies viewport + visit works (assertion test)', () => {
+    // Prove that cy.viewport() THEN cy.visit() shows correct layout
+    cy.viewport(1280, 720);
+    cy.visit(`${FIXTURE_URL}/reload-test.html`);
+    cy.get('#nav').should('contain', 'Desktop Menu');
+    cy.window().its('innerWidth').should('eq', 1280);
+
+    cy.viewport(375, 667);
+    cy.visit(`${FIXTURE_URL}/reload-test.html`);
+    cy.get('#nav').should('contain', 'Mobile Menu');
+    cy.window().its('innerWidth').should('eq', 375);
+  });
+
+  it('responsive reload: JS page shows different layouts per width', () => {
     cy.visit(`${FIXTURE_URL}/reload-test.html`);
     cy.get('#nav').should('be.visible');
 
     Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
-    cy.percySnapshot('Reload Test - Desktop vs Mobile', {
+    cy.percySnapshot('Reload - Desktop vs Mobile', {
       responsiveSnapshotCapture: true,
       widths: [1280, 375]
     });
     Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
   });
 
-  it('CSS-driven page: responsive capture without reload', () => {
-    // responsive-capture.html uses CSS media queries.
-    // Percy CLI handles multi-width rendering — no reload needed.
+  it('responsive CSS: works without reload', () => {
     cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
     cy.get('.card-grid').should('be.visible');
 
-    cy.percySnapshot('CSS Responsive - Grid Layout', {
+    cy.percySnapshot('CSS Responsive Grid', {
       responsiveSnapshotCapture: true,
       widths: [1280, 768, 375]
     });
-  });
-
-  it('standard snapshot without responsive flag', () => {
-    cy.visit(`${FIXTURE_URL}/standard-snapshot.html`);
-    cy.get('.hero').should('be.visible');
-
-    cy.percySnapshot('Standard Snapshot');
   });
 });

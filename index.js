@@ -267,6 +267,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     if (shouldDoResponsiveReload(options)) {
       // --- Responsive + Reload path ---
       // Takes separate snapshots per width using Cypress commands.
+      // Order per width: cy.viewport(w) → cy.reload() → takeSingleSnapshot()
       const widths = options.widths || [Cypress.config('viewportWidth')];
       const originalWidth = Cypress.config('viewportWidth');
       const originalHeight = Cypress.config('viewportHeight');
@@ -275,39 +276,44 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
                            Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
       const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
 
-      let chain = cy.wrap(null, { log: false });
+      // Capture the CURRENT page URL (clean, no cache busters) ONCE before the loop
+      return cy.url({ log: false }).then((pageUrl) => {
+        // Strip any previous cache buster params
+        const cleanUrl = new URL(pageUrl);
+        cleanUrl.searchParams.delete('_percy_w');
+        const baseUrl = cleanUrl.toString();
 
-      for (const width of widths) {
-        const w = width; // capture for closure
+        let chain = cy.wrap(null, { log: false });
 
-        // Step 1: Resize viewport
-        chain = chain.then(() => cy.viewport(w, originalHeight, { log: false }));
+        for (const width of widths) {
+          const w = width;
 
-        // Step 2: Reload page at new viewport width
-        chain = chain.then(() => {
-          return cy.url({ log: false }).then((currentUrl) => {
-            const url = new URL(currentUrl);
-            url.searchParams.set('_percy_w', `${w}`);
-            return cy.visit(url.toString(), { log: false });
+          // Step 1: Set viewport to target width FIRST
+          chain = chain.then(() => cy.viewport(w, originalHeight, { log: false }));
+
+          // Step 2: Visit the page at this viewport width
+          // cy.viewport() persists across cy.visit() within the same it() block.
+          // The page loads and window.onload fires with window.innerWidth = w.
+          chain = chain.then(() => {
+            return cy.visit(`${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_percy_w=${w}`, { log: false });
           });
-        });
 
-        // Step 3: Optional sleep
-        if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
-          chain = chain.then(() => cy.wait(sleepSeconds * 1000, { log: false }));
+          // Step 3: Optional sleep after reload
+          if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
+            chain = chain.then(() => cy.wait(sleepSeconds * 1000, { log: false }));
+          }
+
+          // Step 4: Take a single snapshot at this width
+          chain = chain.then(() => {
+            return takeSingleSnapshot(name, { ...options, widths: [w] }, meta);
+          });
         }
 
-        // Step 4: Take a single snapshot at this width
-        // Pass widths: [w] so Percy renders at exactly this width
-        chain = chain.then(() => {
-          return takeSingleSnapshot(name, { ...options, widths: [w] }, meta);
-        });
-      }
+        // Restore original viewport
+        chain = chain.then(() => cy.viewport(originalWidth, originalHeight, { log: false }));
 
-      // Restore original viewport
-      chain = chain.then(() => cy.viewport(originalWidth, originalHeight, { log: false }));
-
-      return chain;
+        return chain;
+      });
     }
 
     // --- Standard path (including CSS-only responsive) ---
