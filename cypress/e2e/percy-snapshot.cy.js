@@ -1,3 +1,5 @@
+const { percyResponsiveSnapshot } = require('../../index');
+
 /**
  * Real Percy snapshot tests with custom HTML fixtures.
  *
@@ -90,36 +92,25 @@ describe('Percy Snapshot with Custom HTML Fixtures', () => {
     });
   });
 
-  describe('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', () => {
-    it('captures different layouts at different widths with page reload', () => {
-      // This page uses window.onload to set layout based on width.
-      // WITHOUT reload, resizing alone won't change the content.
-      // WITH reload, each width gets the correct layout.
+  describe('Responsive Reload (percyResponsiveSnapshot)', () => {
+    it('JS page: different layouts at each width via DOM array', () => {
       cy.visit(`${FIXTURE_URL}/reload-test.html`);
       cy.get('#nav').should('be.visible');
 
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
-
-      cy.percySnapshot('Reload Test - Desktop vs Mobile Menu', {
-        responsiveSnapshotCapture: true,
+      percyResponsiveSnapshot('Reload Test - Desktop vs Mobile Menu', {
+        url: `${FIXTURE_URL}/reload-test.html`,
         widths: [1280, 375]
       });
-
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
     });
 
-    it('captures responsive snapshots with reload on responsive page', () => {
+    it('CSS page: responsive grid at each width via DOM array', () => {
       cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
       cy.get('.card-grid').should('be.visible');
 
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
-
-      cy.percySnapshot('Reload Test - Responsive Grid', {
-        responsiveSnapshotCapture: true,
+      percyResponsiveSnapshot('Reload Test - Responsive Grid', {
+        url: `${FIXTURE_URL}/responsive-capture.html`,
         widths: [1280, 375]
       });
-
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
     });
   });
 
