@@ -1,7 +1,6 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 
-// Collect client and environment information
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
@@ -14,13 +13,11 @@ const getPercyServerAddress = () => {
 };
 utils.percy.address = getPercyServerAddress();
 
-// Use Cypress's http:request backend task
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
   return Cypress.backend('http:request', options);
 };
 
-// Create Cypress log messages
 function cylog(message, meta) {
   Cypress.log({
     name: 'percySnapshot',
@@ -30,22 +27,13 @@ function cylog(message, meta) {
   });
 }
 
-// URLs to skip when scanning for cross-origin iframes
 const SKIP_IFRAME_SRCS = [
-  'about:blank',
-  'about:srcdoc',
-  'javascript:',
-  'data:',
-  'vbscript:',
-  'blob:',
-  'chrome:',
-  'chrome-extension:'
+  'about:blank', 'about:srcdoc', 'javascript:', 'data:',
+  'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
 
-// Process cross-origin iframes and attach serialized content to the snapshot
 async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
-
   try {
     const currentUrl = new URL(dom.URL);
     const iframes = dom.querySelectorAll('iframe');
@@ -54,58 +42,33 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
     for (const iframe of iframes) {
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
-
-      // Skip non-processable iframes
-      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(prefix => src === prefix || src.startsWith(prefix))) {
-        continue;
-      }
+      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => src === p || src.startsWith(p))) continue;
 
       try {
         const frameUrl = new URL(src, currentUrl.href);
-
-        // Only process cross-origin iframes
         if (frameUrl.origin === currentUrl.origin) continue;
 
-        // Get the percy element ID (set by PercyDOM.serialize on the parent)
         const percyElementId = iframe.getAttribute('data-percy-element-id');
         if (!percyElementId) {
           log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
           continue;
         }
 
-        log.debug(`Processing cross-origin iframe: ${frameUrl.href}`);
-
-        // Try to access the iframe's content and serialize it
         let iframeSnapshot = null;
         try {
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
-
           if (frameDocument) {
-            // Same-origin accessible (e.g., sandboxed but accessible) — inject and serialize
             // eslint-disable-next-line no-eval
             frameWindow.eval(percyDOMScript);
-            iframeSnapshot = frameWindow.PercyDOM.serialize({
-              ...options,
-              enableJavaScript: true
-            });
+            iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
           }
         } catch (accessError) {
-          // Cross-origin security error — expected for true CORS iframes
-          // The Percy CLI will handle these via its own discovery mechanism
           log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
-
-          // Still record the frame metadata so Percy CLI knows about it
           iframeSnapshot = null;
         }
 
-        processedFrames.push({
-          iframeData: { percyElementId },
-          iframeSnapshot,
-          frameUrl: frameUrl.href
-        });
-
-        log.debug(`Captured cross-origin iframe: ${frameUrl.href} (snapshot: ${!!iframeSnapshot})`);
+        processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
       } catch (e) {
         log.debug(`Skipping iframe "${src}": ${e.message}`);
       }
@@ -113,18 +76,16 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
 
     if (processedFrames.length > 0) {
       domSnapshot.corsIframes = processedFrames;
-      log.debug(`Attached ${processedFrames.length} cross-origin iframe(s) to snapshot`);
     }
   } catch (e) {
     log.debug(`Error during cross-origin iframe processing: ${e.message}`);
   }
 }
 
-// Check if responsive DOM capture should be used
+// Checks responsiveSnapshotCapture flag (camelCase, snake_case, or Percy config)
+// Returns false if deferUploads is enabled
 function isResponsiveDOMCaptureValid(options) {
-  if (utils.percy?.config?.percy?.deferUploads) {
-    return false;
-  }
+  if (utils.percy?.config?.percy?.deferUploads) return false;
   return (
     options?.responsive_snapshot_capture ||
     options?.responsiveSnapshotCapture ||
@@ -133,9 +94,8 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
-// Take a DOM snapshot and post it to the snapshot endpoint
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
-  let log = utils.logger('cypress');
+  const log = utils.logger('cypress');
 
   if (typeof name === 'object') {
     options = name;
@@ -143,12 +103,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   }
   name = name || cy.state('runnable').fullTitle();
 
-  const meta = {
-    snapshot: {
-      name: name,
-      testCase: options.testCase
-    }
-  };
+  const meta = { snapshot: { name, testCase: options.testCase } };
 
   const withLog = async (func, context, _throw = true) => {
     try {
@@ -165,45 +120,43 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const withRetry = async (func) => {
     let num = 1;
     const maxNum = 3;
-    const sleepTime = 1000;
     let error;
-
     while (num <= maxNum) {
       try {
         return await func();
       } catch (e) {
         error = e;
         log.error(`Retrying... (${num}/${maxNum})`);
-        await new Promise((res) => setTimeout(res, sleepTime));
+        await new Promise(res => setTimeout(res, 1000));
       }
       num += 1;
     }
     throw error;
   };
 
-  // Check responsive flag SYNCHRONOUSLY before any cy commands
+  // =====================================================================
+  // RESPONSIVE CAPTURE PATH (cy.task Node-side state)
+  //
+  // Uses isResponsiveDOMCaptureValid as the main gate.
+  // Inside, checks PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE for reload.
+  //
+  // Features from captureResponsiveDOM merged here:
+  // - utils.getResponsiveWidths() for width/height pairs
+  // - PercyDOM.waitForResize() before serialize
+  // - PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT for viewport height
+  // - PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME between captures
+  // - PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE for page reload
+  // =====================================================================
   const needsResponsiveCapture = isResponsiveDOMCaptureValid(options);
   const needsReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
   if (needsResponsiveCapture) {
-    // =====================================================================
-    // RESPONSIVE CAPTURE PATH (unified — uses cy.task for Node-side state)
-    //
-    // Handles BOTH reload and non-reload responsive capture:
-    // - With reload: cy.viewport → cy.visit(url) → serialize → cy.task(store)
-    // - Without reload: cy.viewport → serialize → cy.task(store)
-    //
-    // cy.task stores DOM snapshots in Node.js memory,
-    // which is immune to page navigations.
-    // =====================================================================
     const originalWidth = Cypress.config('viewportWidth');
     const originalHeight = Cypress.config('viewportHeight');
-
-    const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
-                         Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+    const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
 
-    // Preconditions + fetch PercyDOM + get responsive widths from CLI config
+    // Preconditions + fetch PercyDOM + get responsive width/height pairs from CLI
     cy.then({ timeout: CY_TIMEOUT }, async () => {
       if (Cypress.config('isInteractive') && !Cypress.config('enablePercyInteractiveMode')) {
         Cypress.env('__percySkip', true);
@@ -215,44 +168,30 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
       Cypress.env('__percyDOMScript', await utils.fetchPercyDOM());
 
-      // Use utils.getResponsiveWidths to get width/height PAIRS from CLI config
-      // (same as captureResponsiveDOM uses)
       if (utils.getResponsiveWidths) {
-        const widthHeights = await utils.getResponsiveWidths(options.widths || []);
-        Cypress.env('__percyWidthHeights', JSON.stringify(widthHeights));
+        Cypress.env('__percyWidthHeights', JSON.stringify(await utils.getResponsiveWidths(options.widths || [])));
       } else {
-        // Fallback: use raw widths with default height
-        const fallback = (options.widths || [originalWidth]).map(w => ({ width: w, height: null }));
-        Cypress.env('__percyWidthHeights', JSON.stringify(fallback));
+        Cypress.env('__percyWidthHeights', JSON.stringify((options.widths || [originalWidth]).map(w => ({ width: w, height: null }))));
       }
     });
 
-    // Clear previous snapshots + save current URL
     cy.task('percy:clearSnapshots', null, { log: false });
-    cy.url({ log: false }).then((currentUrl) => {
-      Cypress.env('__percyBaseUrl', currentUrl);
-    });
+    cy.url({ log: false }).then(url => Cypress.env('__percyBaseUrl', url));
 
-    // Calculate default height
     const useMinHeight = Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const configMinHeight = useMinHeight
-      ? (options.minHeight || utils.percy?.config?.snapshot?.minHeight || originalHeight)
-      : originalHeight;
+    const minHeight = useMinHeight ? (options.minHeight || utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
 
-    // Get widths and iterate — widthHeights comes from the async step above
+    // Iterate widths: viewport → (optional reload) → serialize → cy.task(store)
     cy.then(() => {
       if (Cypress.env('__percySkip')) return;
-
       const widthHeights = JSON.parse(Cypress.env('__percyWidthHeights') || '[]');
 
       for (const { width, height: configHeight } of widthHeights) {
         const w = width;
-        const h = configHeight || configMinHeight;
+        const h = configHeight || minHeight;
 
-        // Resize viewport (same as captureResponsiveDOM)
         cy.viewport(w, h);
 
-        // Reload page if flag is set (JS-driven responsive pages)
         if (needsReload) {
           cy.then(() => {
             if (Cypress.env('__percySkip')) return;
@@ -261,22 +200,16 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           });
         }
 
-        // Optional sleep between captures
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-        // Inject PercyDOM + setup resize listener + serialize + store via cy.task
-        cy.document({ log: false }).then((doc) => {
+        cy.document({ log: false }).then(doc => {
           if (Cypress.env('__percySkip')) return;
           const script = Cypress.env('__percyDOMScript');
           if (!script) return;
 
           // eslint-disable-next-line no-eval
           eval(script);
-
-          // Setup resize listener (same as captureResponsiveDOM)
-          if (window.PercyDOM.waitForResize) {
-            window.PercyDOM.waitForResize();
-          }
+          if (window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
           dom.width = w;
@@ -284,20 +217,20 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         });
       }
 
-      // Restore viewport
       cy.viewport(originalWidth, originalHeight);
     });
 
-    // Retrieve all snapshots from Node.js and post ONE snapshot
-    cy.task('percy:getSnapshots', null, { log: false }).then((snapshots) => {
+    // Collect all snapshots from Node.js and post ONE snapshot
+    cy.task('percy:getSnapshots', null, { log: false }).then(snapshots => {
       if (!snapshots || snapshots.length === 0 || Cypress.env('__percySkip')) {
         Cypress.env('__percySkip', undefined);
         Cypress.env('__percyDOMScript', undefined);
         Cypress.env('__percyBaseUrl', undefined);
+        Cypress.env('__percyWidthHeights', undefined);
         return;
       }
 
-      cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (doc) => {
+      cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
         try {
           await utils.postSnapshot({
             ...options,
@@ -315,6 +248,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         Cypress.env('__percySkip', undefined);
         Cypress.env('__percyDOMScript', undefined);
         Cypress.env('__percyBaseUrl', undefined);
+        Cypress.env('__percyWidthHeights', undefined);
       });
     });
 
@@ -325,12 +259,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   // STANDARD PATH (single DOM capture)
   // =====================================================================
   return cy.then({ timeout: CY_TIMEOUT }, async () => {
-    if (Cypress.config('isInteractive') &&
-        !Cypress.config('enablePercyInteractiveMode')) {
-      return cylog('Disabled in interactive mode', {
-        details: 'use "cypress run" instead of "cypress open"',
-        name
-      });
+    if (Cypress.config('isInteractive') && !Cypress.config('enablePercyInteractiveMode')) {
+      return cylog('Disabled in interactive mode', { details: 'use "cypress run" instead of "cypress open"', name });
     }
 
     if (!await utils.isPercyEnabled()) {
@@ -344,7 +274,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
     }, 'injecting @percy/dom');
 
-    return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
+    return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async dom => {
       const percyDOMScript = await utils.fetchPercyDOM();
 
       let domSnapshot = await withLog(() => {
@@ -355,10 +285,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
       }, 'processing cross-origin iframes', false);
 
-      return cy.getCookies({ log: false }).then(async (cookies) => {
-        if (cookies && cookies.length > 0) {
-          domSnapshot.cookies = cookies;
-        }
+      return cy.getCookies({ log: false }).then(async cookies => {
+        if (cookies && cookies.length > 0) domSnapshot.cookies = cookies;
 
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
         const _throw = throwConfig === undefined ? false : throwConfig;
