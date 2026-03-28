@@ -134,6 +134,8 @@ function isResponsiveDOMCaptureValid(options) {
 }
 
 // Capture responsive DOM snapshots across different widths
+// Kept for potential future use when Cypress adds better viewport control
+// eslint-disable-next-line no-unused-vars
 async function captureResponsiveDOM(dom, options) {
   if (!utils.getResponsiveWidths) {
     throw new Error('Update Percy CLI to the latest version to use responsiveSnapshotCapture');
@@ -260,20 +262,20 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  // Check reload flag SYNCHRONOUSLY before any cy commands
-  const needsResponsiveReload = (
-    (options?.responsive_snapshot_capture || options?.responsiveSnapshotCapture) &&
-    Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true'
-  );
+  // Check responsive flag SYNCHRONOUSLY before any cy commands
+  const needsResponsiveCapture = isResponsiveDOMCaptureValid(options);
+  const needsReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
-  if (needsResponsiveReload) {
+  if (needsResponsiveCapture) {
     // =====================================================================
-    // RESPONSIVE + RELOAD PATH (using cy.task for Node-side state)
+    // RESPONSIVE CAPTURE PATH (unified — uses cy.task for Node-side state)
     //
-    // Pattern: cy.task stores DOM snapshots in Node.js memory,
+    // Handles BOTH reload and non-reload responsive capture:
+    // - With reload: cy.viewport → cy.visit(url) → serialize → cy.task(store)
+    // - Without reload: cy.viewport → serialize → cy.task(store)
+    //
+    // cy.task stores DOM snapshots in Node.js memory,
     // which is immune to page navigations.
-    //
-    // All cy commands are FLAT in the command body.
     // =====================================================================
     const widths = options.widths || [Cypress.config('viewportWidth')];
     const originalWidth = Cypress.config('viewportWidth');
@@ -307,20 +309,32 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       Cypress.env('__percyBaseUrl', currentUrl);
     });
 
-    // For each width: viewport → visit → serialize → store in Node.js
+    // For each width: viewport → (optional visit for reload) → serialize → store
     for (const width of widths) {
       const w = width;
 
       cy.viewport(w, defaultHeight);
 
-      // Visit using saved URL from Cypress.env
-      cy.then(() => {
-        if (Cypress.env('__percySkip')) return;
-        const baseUrl = Cypress.env('__percyBaseUrl');
-        if (baseUrl) cy.visit(baseUrl, { log: false });
-      });
+      // Reload page at this width (only when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is set)
+      if (needsReload) {
+        cy.then(() => {
+          if (Cypress.env('__percySkip')) return;
+          const baseUrl = Cypress.env('__percyBaseUrl');
+          if (baseUrl) cy.visit(baseUrl, { log: false });
+        });
+      }
 
       if (sleepMs > 0) cy.wait(sleepMs, { log: false });
+
+      // Inject PercyDOM (may be lost after page reload, or needed after resize)
+      cy.then(() => {
+        if (Cypress.env('__percySkip')) return;
+        const script = Cypress.env('__percyDOMScript');
+        if (script && !window.PercyDOM) {
+          // eslint-disable-next-line no-eval
+          eval(script);
+        }
+      });
 
       // Serialize DOM + store in Node.js via cy.task
       cy.document({ log: false }).then((doc) => {
@@ -328,6 +342,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const script = Cypress.env('__percyDOMScript');
         if (!script) return;
 
+        // Re-inject PercyDOM (always, since page may have reloaded)
         // eslint-disable-next-line no-eval
         eval(script);
         const dom = window.PercyDOM.serialize({ ...options, dom: doc });
@@ -396,32 +411,18 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       const percyDOMScript = await utils.fetchPercyDOM();
-      const useResponsive = isResponsiveDOMCaptureValid(options);
 
       let domSnapshot = await withLog(() => {
-        if (useResponsive) {
-          return captureResponsiveDOM(dom, options);
-        }
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
       await withLog(async () => {
-        if (Array.isArray(domSnapshot)) {
-          for (const snap of domSnapshot) {
-            await processCrossOriginIframes(dom, snap, options, percyDOMScript);
-          }
-        } else {
-          await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
-        }
+        await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
       }, 'processing cross-origin iframes', false);
 
       return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
-          if (Array.isArray(domSnapshot)) {
-            domSnapshot.forEach(snap => { snap.cookies = cookies; });
-          } else {
-            domSnapshot.cookies = cookies;
-          }
+          domSnapshot.cookies = cookies;
         }
 
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
