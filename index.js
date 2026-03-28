@@ -235,6 +235,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
  * For JS-driven pages where layout changes on window.onload (not CSS media queries).
  * Sends ONE snapshot with a domSnapshot array — same as Selenium/Playwright SDKs.
  *
+ * Uses cy.task() to store DOM snapshots in the Node.js background process,
+ * which is immune to page navigations that destroy browser window state.
+ *
  * @example
  * const { percyResponsiveSnapshot } = require('@percy/cypress');
  *
@@ -255,72 +258,65 @@ function percyResponsiveSnapshot(name, options = {}) {
   }
 
   const url = options.url;
-  const widths = options.widths || [1280, 375];
+  const widths = options.widths || [];
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
 
-  // Closure variables — survive across cy.visit() (unlike window.*)
-  const domSnapshots = [];
+  // Closure for percyDOMScript (small string, safe in browser memory)
   let percyDOMScript = null;
-  let pageUrl = null;
 
-  // Step 1: Fetch PercyDOM script once (before the loop)
+  // Step 1: Check Percy + fetch DOM script + clear any previous state
   cy.then({ timeout: CY_TIMEOUT }, async () => {
     if (!await utils.isPercyEnabled()) return;
     percyDOMScript = await utils.fetchPercyDOM();
   });
+  cy.task('percy:clearSnapshots', null, { log: false });
 
-  // Step 2: For each width — viewport → visit → serialize DOM into array
-  // cy.viewport and cy.visit are FLAT (no nesting).
-  // cy.document().then() is safe — only does JS inside, no cy commands.
+  // Step 2: For each width — viewport → visit → serialize → store in Node.js
   for (const width of widths) {
     const w = width;
 
     cy.viewport(w, originalHeight);
     cy.visit(url);
 
-    // Serialize DOM at this width — .then() only does JS, no cy commands
+    // Serialize DOM then send to Node.js via cy.task (immune to page navigation)
     cy.document().then((doc) => {
-      if (!percyDOMScript) return; // Percy not enabled
-
-      // Inject PercyDOM on the new page
+      if (!percyDOMScript) return;
       // eslint-disable-next-line no-eval
       eval(percyDOMScript);
-
-      // Serialize
-      const snapshot = window.PercyDOM.serialize({ ...options, dom: doc });
-      snapshot.width = w;
-      domSnapshots.push(snapshot);
-      pageUrl = doc.URL;
+      const dom = window.PercyDOM.serialize({ ...options, dom: doc });
+      // cy.task sends data to Node.js — survives any future cy.visit()
+      cy.task('percy:storeSnapshot', { width: w, dom }, { log: false });
     });
   }
 
   // Step 3: Restore viewport
   cy.viewport(originalWidth, originalHeight);
 
-  // Step 4: Post ONE snapshot with all DOMs as an array
-  cy.then({ timeout: CY_TIMEOUT }, async () => {
-    if (!percyDOMScript || domSnapshots.length === 0) return;
+  // Step 4: Retrieve all snapshots from Node.js and post ONE snapshot
+  cy.task('percy:getSnapshots', null, { log: false }).then((snapshots) => {
+    if (!snapshots || snapshots.length === 0) return;
 
-    try {
-      await utils.postSnapshot({
-        ...options,
-        environmentInfo: ENV_INFO,
-        clientInfo: CLIENT_INFO,
-        domSnapshot: domSnapshots,
-        url: pageUrl,
-        name
-      });
+    cy.document().then({ timeout: CY_TIMEOUT }, async (doc) => {
+      try {
+        await utils.postSnapshot({
+          ...options,
+          environmentInfo: ENV_INFO,
+          clientInfo: CLIENT_INFO,
+          domSnapshot: snapshots,
+          url: doc.URL,
+          name
+        });
 
-      Cypress.log({
-        name: 'percySnapshot',
-        displayName: 'percy',
-        message: `${name} (${domSnapshots.length} widths)`
-      });
-    } catch (err) {
-      const log = utils.logger('cypress');
-      log.error(`Failed to post responsive snapshot "${name}"`, err);
-    }
+        Cypress.log({
+          name: 'percySnapshot',
+          displayName: 'percy',
+          message: `${name} (${snapshots.length} widths)`
+        });
+      } catch (err) {
+        utils.logger('cypress').error(`Failed to post responsive snapshot "${name}"`, err);
+      }
+    });
   });
 }
 
