@@ -15,7 +15,7 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 const getPercyServerAddress = () => {
   return (typeof Cypress.expose === 'function')
     ? Cypress.expose('PERCY_SERVER_ADDRESS')
-    : /* istanbul ignore next */ Cypress.env('PERCY_SERVER_ADDRESS');
+    : Cypress.env('PERCY_SERVER_ADDRESS');
 };
 utils.percy.address = getPercyServerAddress();
 
@@ -139,110 +139,6 @@ function shouldDoResponsiveReload(options) {
   return hasResponsiveFlag && hasReloadFlag;
 }
 
-// eslint-disable-next-line no-unused-vars
-async function captureResponsiveDOM(dom, options) {
-  if (!utils.getResponsiveWidths) {
-    throw new Error('Update Percy CLI to the latest version to use responsiveSnapshotCapture');
-  }
-
-  const widthHeights = await utils.getResponsiveWidths(options.widths || []);
-  const domSnapshots = [];
-  const currentWidth = window.innerWidth;
-  const currentHeight = window.innerHeight;
-  let lastWindowWidth = currentWidth;
-  let lastWindowHeight = currentHeight;
-  let resizeCount = 0;
-
-  // Setup the resizeCount listener
-  /* istanbul ignore next: no instrumenting injected code */
-  window.PercyDOM.waitForResize();
-
-  // Calculate default height — check options.minHeight first (parity with Playwright)
-  let defaultHeight = currentHeight;
-  if (Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true') {
-    defaultHeight = options.minHeight || utils.percy?.config?.snapshot?.minHeight || currentHeight;
-  }
-
-  // Check if page should be reloaded between responsive captures
-  const shouldReloadPage = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
-
-  // Read sleep time once before the loop (not per-iteration)
-  const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
-                       Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
-  const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
-
-  // Fetch PercyDOM script once upfront (parity with Playwright line 193-194)
-  // Used for re-injection after page reloads and as a fallback
-  const percyDOMScript = await utils.fetchPercyDOM();
-
-  try {
-    for (let { width, height } of widthHeights) {
-      height = height || defaultHeight;
-      if (lastWindowWidth !== width || lastWindowHeight !== height) {
-        resizeCount++;
-        // Resize the Cypress viewport
-        Cypress.config('viewportWidth', width);
-        Cypress.config('viewportHeight', height);
-        // Trigger actual resize
-        window.resizeTo(width, height);
-
-        // Wait for resize to settle by polling resizeCount
-        const start = Date.now();
-        while (Date.now() - start < 1000) {
-          /* istanbul ignore next: no instrumenting injected code */
-          if (window.resizeCount >= resizeCount) break;
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
-        lastWindowWidth = width;
-        lastWindowHeight = height;
-      }
-
-      // Reload page between captures if configured (parity with Playwright/Selenium)
-      if (shouldReloadPage) {
-        // Reload the current page
-        window.location.reload();
-        // Wait for page to be ready after reload
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Re-inject PercyDOM after reload (it was lost when the page reloaded)
-        // eslint-disable-next-line no-eval
-        eval(percyDOMScript);
-
-        // Re-setup resize listener and reset counter
-        /* istanbul ignore next: no instrumenting injected code */
-        window.PercyDOM.waitForResize();
-        resizeCount = 0;
-      }
-
-      // Optional sleep between captures
-      if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
-        await new Promise(resolve => setTimeout(resolve, sleepSeconds * 1000));
-      }
-
-      // Serialize DOM at this width
-      /* istanbul ignore next: no instrumenting injected code */
-      let domSnapshot = window.PercyDOM.serialize({ ...options, dom });
-      domSnapshot.width = width;
-      domSnapshots.push(domSnapshot);
-    }
-  } finally {
-    // Always reset viewport to original dimensions and wait for it to settle
-    resizeCount++;
-    Cypress.config('viewportWidth', currentWidth);
-    Cypress.config('viewportHeight', currentHeight);
-    window.resizeTo(currentWidth, currentHeight);
-    // Wait for restoration resize to complete (parity with Playwright)
-    const start = Date.now();
-    while (Date.now() - start < 1000) {
-      /* istanbul ignore next: no instrumenting injected code */
-      if (window.resizeCount >= resizeCount) break;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-  }
-
-  return domSnapshots;
-}
-
 // Take a DOM snapshot and post it to the snapshot endpoint
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let log = utils.logger('cypress');
@@ -356,7 +252,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       const percyDOMScript = await utils.fetchPercyDOM();
 
-      /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
@@ -394,4 +289,118 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion };
+/**
+ * Take Percy snapshots at multiple viewport widths with page reload.
+ *
+ * For JS-driven responsive pages where the layout changes on window.onload
+ * (not CSS media queries), the page must reload at each width.
+ *
+ * This is a PLAIN FUNCTION (not a Cypress command) that enqueues cy commands
+ * at the caller's level. Call it directly in your test — not inside .then().
+ *
+ * @example
+ * const { percyResponsiveSnapshot } = require('@percy/cypress');
+ *
+ * it('captures responsive layouts', () => {
+ *   cy.visit('/my-page');
+ *   percyResponsiveSnapshot('My Page', {
+ *     widths: [1280, 768, 375],
+ *     // any other percySnapshot options
+ *   });
+ * });
+ *
+ * @param {string} name - Snapshot name (each width gets " @{w}px" appended)
+ * @param {object} options - Options (widths required, plus any percySnapshot options)
+ */
+/**
+ * Take a responsive Percy snapshot with page reload at each width.
+ * Captures DOM at each viewport width and sends as ONE snapshot
+ * with a domSnapshot array — same as Selenium/Playwright SDKs.
+ *
+ * @example
+ * const { percyResponsiveSnapshot } = require('@percy/cypress');
+ *
+ * it('responsive test', () => {
+ *   cy.visit('/my-page');
+ *   percyResponsiveSnapshot('My Page', {
+ *     url: '/my-page',
+ *     widths: [1280, 768, 375],
+ *   });
+ * });
+ */
+function percyResponsiveSnapshot(name, options = {}) {
+  if (!options.url) {
+    throw new Error('percyResponsiveSnapshot requires options.url');
+  }
+
+  const url = options.url;
+  const widths = options.widths || [1280, 375];
+  const originalWidth = Cypress.config('viewportWidth');
+  const originalHeight = Cypress.config('viewportHeight');
+
+  // Closure variables — survive across cy.visit() (unlike window.*)
+  const domSnapshots = [];
+  let percyDOMScript = null;
+  let pageUrl = null;
+
+  // Step 1: Fetch PercyDOM script once (before the loop)
+  cy.then({ timeout: CY_TIMEOUT }, async () => {
+    if (!await utils.isPercyEnabled()) return;
+    percyDOMScript = await utils.fetchPercyDOM();
+  });
+
+  // Step 2: For each width — viewport → visit → serialize DOM into array
+  // cy.viewport and cy.visit are FLAT (no nesting).
+  // cy.document().then() is safe — only does JS inside, no cy commands.
+  for (const width of widths) {
+    const w = width;
+
+    cy.viewport(w, originalHeight);
+    cy.visit(url);
+
+    // Serialize DOM at this width — .then() only does JS, no cy commands
+    cy.document().then((doc) => {
+      if (!percyDOMScript) return; // Percy not enabled
+
+      // Inject PercyDOM on the new page
+      // eslint-disable-next-line no-eval
+      eval(percyDOMScript);
+
+      // Serialize
+      const snapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+      snapshot.width = w;
+      domSnapshots.push(snapshot);
+      pageUrl = doc.URL;
+    });
+  }
+
+  // Step 3: Restore viewport
+  cy.viewport(originalWidth, originalHeight);
+
+  // Step 4: Post ONE snapshot with all DOMs as an array
+  cy.then({ timeout: CY_TIMEOUT }, async () => {
+    if (!percyDOMScript || domSnapshots.length === 0) return;
+
+    try {
+      await utils.postSnapshot({
+        ...options,
+        environmentInfo: ENV_INFO,
+        clientInfo: CLIENT_INFO,
+        domSnapshot: domSnapshots,
+        url: pageUrl,
+        name
+      });
+
+      Cypress.log({
+        name: 'percySnapshot',
+        displayName: 'percy',
+        message: `${name} (${domSnapshots.length} widths)`
+      });
+    } catch (err) {
+      const log = utils.logger('cypress');
+      log.error(`Failed to post responsive snapshot "${name}"`, err);
+    }
+  });
+}
+
+module.exports = { createRegion, percyResponsiveSnapshot };
