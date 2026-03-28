@@ -262,7 +262,17 @@ function percyResponsiveSnapshot(name, options = {}) {
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
 
-  // Closure for percyDOMScript (small string, safe in browser memory)
+  // Env var: PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT — use minHeight for viewport
+  const useMinHeight = Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+  const defaultHeight = useMinHeight
+    ? (options.minHeight || utils.percy?.config?.snapshot?.minHeight || originalHeight)
+    : originalHeight;
+
+  // Env var: sleep between responsive captures (parity with Selenium/Playwright)
+  const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
+                       Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+  const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
+
   let percyDOMScript = null;
 
   // Step 1: Check Percy + fetch DOM script + clear any previous state
@@ -272,20 +282,24 @@ function percyResponsiveSnapshot(name, options = {}) {
   });
   cy.task('percy:clearSnapshots', null, { log: false });
 
-  // Step 2: For each width — viewport → visit → serialize → store in Node.js
+  // Step 2: For each width — viewport → visit → (optional sleep) → serialize → store
   for (const width of widths) {
     const w = width;
 
-    cy.viewport(w, originalHeight);
+    cy.viewport(w, defaultHeight);
     cy.visit(url);
 
-    // Serialize DOM then send to Node.js via cy.task (immune to page navigation)
+    // Env var: sleep between captures
+    if (sleepMs > 0) {
+      cy.wait(sleepMs, { log: false });
+    }
+
+    // Serialize DOM then send to Node.js via cy.task
     cy.document().then((doc) => {
       if (!percyDOMScript) return;
       // eslint-disable-next-line no-eval
       eval(percyDOMScript);
       const dom = window.PercyDOM.serialize({ ...options, dom: doc });
-      // cy.task sends data to Node.js — survives any future cy.visit()
       cy.task('percy:storeSnapshot', { width: w, dom }, { log: false });
     });
   }
