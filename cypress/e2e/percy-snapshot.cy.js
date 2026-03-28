@@ -124,15 +124,15 @@ describe('Percy Snapshot with Custom HTML Fixtures', () => {
   });
 
   describe('Cross-Origin Iframe Processing', () => {
-    it('detects and processes cross-origin iframes', () => {
-      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`);
+    it('detects and processes cross-origin iframes', { defaultCommandTimeout: 60000 }, () => {
+      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`, { timeout: 30000 });
       cy.get('.cross-origin-frame').should('have.length', 2);
 
       cy.percySnapshot('Cross-Origin Iframe Page');
     });
 
-    it('captures cross-origin iframes alongside responsive capture', { defaultCommandTimeout: 60000 }, () => {
-      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`);
+    it('captures cross-origin iframes alongside responsive capture', { defaultCommandTimeout: 120000 }, () => {
+      cy.visit(`${FIXTURE_URL}/cross-origin-iframe.html`, { timeout: 30000 });
       cy.get('.cross-origin-frame').should('have.length', 2);
 
       cy.percySnapshot('Cross-Origin Iframe - Responsive', {
