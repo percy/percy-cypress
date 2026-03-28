@@ -5,12 +5,7 @@ const { createRegion } = require('./createRegion');
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
-// asset discovery should timeout before this
-// 1.5 times the 30 second nav timeout
 const CY_TIMEOUT = 30 * 1000 * 1.5;
-
-// Maybe set the CLI API address from the environment
-// Support both new and legacy methods for backward compatibility
 
 const getPercyServerAddress = () => {
   return (typeof Cypress.expose === 'function')
@@ -125,30 +120,14 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
   }
 }
 
-// Check if responsive snapshot capture with page reload is needed.
-// When true, the SDK sends the snapshot WITHOUT domSnapshot so Percy CLI
-// navigates to the URL itself, resizes, and reloads at each width.
-function shouldDoResponsiveReload(options) {
-  const hasResponsiveFlag = (
-    options?.responsive_snapshot_capture ||
-    options?.responsiveSnapshotCapture ||
-    utils.percy?.config?.snapshot?.responsiveSnapshotCapture ||
-    false
-  );
-  const hasReloadFlag = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
-  return hasResponsiveFlag && hasReloadFlag;
-}
-
 // Take a DOM snapshot and post it to the snapshot endpoint
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let log = utils.logger('cypress');
 
-  // if name is not passed
   if (typeof name === 'object') {
     options = name;
     name = undefined;
   }
-  // Default name to test title
   name = name || cy.state('runnable').fullTitle();
 
   const meta = {
@@ -211,44 +190,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
     }, 'injecting @percy/dom');
 
-    // Check if responsive capture with reload is needed
-    const useResponsiveReload = shouldDoResponsiveReload(options);
-
-    if (useResponsiveReload) {
-      // =====================================================================
-      // RESPONSIVE + RELOAD PATH
-      //
-      // Don't send domSnapshot — let Percy CLI handle everything:
-      // 1. CLI navigates to the URL (discovery.js:286)
-      // 2. CLI resizes at each width (discovery.js:332)
-      // 3. CLI reloads the page at each width (discovery.js:333)
-      // 4. CLI captures DOM and discovers assets
-      //
-      // The SDK just sends: url + name + options (including
-      // responsiveSnapshotCapture: true and widths)
-      // =====================================================================
-      return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
-        const throwConfig = Cypress.config('percyThrowErrorOnFailure');
-        const _throw = throwConfig === undefined ? false : throwConfig;
-
-        let response = await withRetry(async () => await withLog(async () => {
-          return await utils.postSnapshot({
-            ...options,
-            environmentInfo: ENV_INFO,
-            clientInfo: CLIENT_INFO,
-            // NO domSnapshot — Percy CLI navigates to the URL and captures itself
-            url: dom.URL,
-            name
-          });
-        }, 'posting snapshot (CLI-handled responsive)', _throw));
-
-        cylog(name, meta);
-        return response;
-      });
-    }
-
-    // --- Standard path (non-responsive or CSS-only responsive) ---
-    // Serialize and capture the DOM
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       const percyDOMScript = await utils.fetchPercyDOM();
 
@@ -290,32 +231,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 });
 
 /**
- * Take Percy snapshots at multiple viewport widths with page reload.
- *
- * For JS-driven responsive pages where the layout changes on window.onload
- * (not CSS media queries), the page must reload at each width.
- *
- * This is a PLAIN FUNCTION (not a Cypress command) that enqueues cy commands
- * at the caller's level. Call it directly in your test — not inside .then().
- *
- * @example
- * const { percyResponsiveSnapshot } = require('@percy/cypress');
- *
- * it('captures responsive layouts', () => {
- *   cy.visit('/my-page');
- *   percyResponsiveSnapshot('My Page', {
- *     widths: [1280, 768, 375],
- *     // any other percySnapshot options
- *   });
- * });
- *
- * @param {string} name - Snapshot name (each width gets " @{w}px" appended)
- * @param {object} options - Options (widths required, plus any percySnapshot options)
- */
-/**
- * Take a responsive Percy snapshot with page reload at each width.
- * Captures DOM at each viewport width and sends as ONE snapshot
- * with a domSnapshot array — same as Selenium/Playwright SDKs.
+ * Capture responsive Percy snapshots with page reload at each viewport width.
+ * For JS-driven pages where layout changes on window.onload (not CSS media queries).
+ * Sends ONE snapshot with a domSnapshot array — same as Selenium/Playwright SDKs.
  *
  * @example
  * const { percyResponsiveSnapshot } = require('@percy/cypress');
@@ -327,6 +245,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
  *     widths: [1280, 768, 375],
  *   });
  * });
+ *
+ * @param {string} name - Snapshot name
+ * @param {object} options - Must include url and widths
  */
 function percyResponsiveSnapshot(name, options = {}) {
   if (!options.url) {
