@@ -120,6 +120,98 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
   }
 }
 
+// Check if responsive DOM capture should be used
+function isResponsiveDOMCaptureValid(options) {
+  if (utils.percy?.config?.percy?.deferUploads) {
+    return false;
+  }
+  return (
+    options?.responsive_snapshot_capture ||
+    options?.responsiveSnapshotCapture ||
+    utils.percy?.config?.snapshot?.responsiveSnapshotCapture ||
+    false
+  );
+}
+
+// Capture responsive DOM snapshots across different widths
+async function captureResponsiveDOM(dom, options) {
+  if (!utils.getResponsiveWidths) {
+    throw new Error('Update Percy CLI to the latest version to use responsiveSnapshotCapture');
+  }
+
+  const widthHeights = await utils.getResponsiveWidths(options.widths || []);
+  const domSnapshots = [];
+  const currentWidth = window.innerWidth;
+  const currentHeight = window.innerHeight;
+  let lastWindowWidth = currentWidth;
+  let lastWindowHeight = currentHeight;
+  let resizeCount = 0;
+
+  window.PercyDOM.waitForResize();
+
+  let defaultHeight = currentHeight;
+  if (Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true') {
+    defaultHeight = options.minHeight || utils.percy?.config?.snapshot?.minHeight || currentHeight;
+  }
+
+  const shouldReloadPage = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+
+  const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') ||
+                       Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+  const sleepSeconds = rawSleepTime ? parseInt(rawSleepTime, 10) : 0;
+
+  const percyDOMScript = await utils.fetchPercyDOM();
+
+  try {
+    for (let { width, height } of widthHeights) {
+      height = height || defaultHeight;
+      if (lastWindowWidth !== width || lastWindowHeight !== height) {
+        resizeCount++;
+        Cypress.config('viewportWidth', width);
+        Cypress.config('viewportHeight', height);
+        window.resizeTo(width, height);
+
+        const start = Date.now();
+        while (Date.now() - start < 1000) {
+          if (window.resizeCount >= resizeCount) break;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        lastWindowWidth = width;
+        lastWindowHeight = height;
+      }
+
+      if (shouldReloadPage) {
+        window.location.reload();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // eslint-disable-next-line no-eval
+        eval(percyDOMScript);
+        window.PercyDOM.waitForResize();
+        resizeCount = 0;
+      }
+
+      if (!isNaN(sleepSeconds) && sleepSeconds > 0) {
+        await new Promise(resolve => setTimeout(resolve, sleepSeconds * 1000));
+      }
+
+      let domSnapshot = window.PercyDOM.serialize({ ...options, dom });
+      domSnapshot.width = width;
+      domSnapshots.push(domSnapshot);
+    }
+  } finally {
+    resizeCount++;
+    Cypress.config('viewportWidth', currentWidth);
+    Cypress.config('viewportHeight', currentHeight);
+    window.resizeTo(currentWidth, currentHeight);
+    const start = Date.now();
+    while (Date.now() - start < 1000) {
+      if (window.resizeCount >= resizeCount) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  return domSnapshots;
+}
+
 // Take a DOM snapshot and post it to the snapshot endpoint
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let log = utils.logger('cypress');
@@ -304,18 +396,32 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       const percyDOMScript = await utils.fetchPercyDOM();
+      const useResponsive = isResponsiveDOMCaptureValid(options);
 
       let domSnapshot = await withLog(() => {
+        if (useResponsive) {
+          return captureResponsiveDOM(dom, options);
+        }
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
       await withLog(async () => {
-        await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
+        if (Array.isArray(domSnapshot)) {
+          for (const snap of domSnapshot) {
+            await processCrossOriginIframes(dom, snap, options, percyDOMScript);
+          }
+        } else {
+          await processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript);
+        }
       }, 'processing cross-origin iframes', false);
 
       return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
-          domSnapshot.cookies = cookies;
+          if (Array.isArray(domSnapshot)) {
+            domSnapshot.forEach(snap => { snap.cookies = cookies; });
+          } else {
+            domSnapshot.cookies = cookies;
+          }
         }
 
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
