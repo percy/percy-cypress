@@ -6,12 +6,20 @@ const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
-const getPercyServerAddress = () => {
-  return (typeof Cypress.expose === 'function')
-    ? Cypress.expose('PERCY_SERVER_ADDRESS')
-    : Cypress.env('PERCY_SERVER_ADDRESS');
+// Read environment values using Cypress.expose() (Cypress 15.10+) with Cypress.env() fallback.
+// Tries Cypress.expose() first, then Cypress.env() (wrapped in try/catch for allowCypressEnv: false).
+const getEnvValue = (key) => {
+  if (typeof Cypress.expose === 'function') {
+    const val = Cypress.expose(key);
+    if (val !== undefined) return val;
+  }
+  try {
+    return Cypress.env(key);
+  } catch (e) {
+    return undefined;
+  }
 };
-utils.percy.address = getPercyServerAddress();
+utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
@@ -100,6 +108,19 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
+// Internal state for responsive capture (closure variables, not Cypress.env)
+let _percySkip = false;
+let _percyDOMScript = null;
+let _percyBaseUrl = null;
+let _percyWidthHeights = null;
+
+function _resetResponsiveState() {
+  _percySkip = false;
+  _percyDOMScript = null;
+  _percyBaseUrl = null;
+  _percyWidthHeights = null;
+}
+
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
 
@@ -141,43 +162,43 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   };
 
   const needsResponsiveCapture = isResponsiveDOMCaptureValid(options);
-  const needsReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+  const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
   if (needsResponsiveCapture) {
     const originalWidth = Cypress.config('viewportWidth');
     const originalHeight = Cypress.config('viewportHeight');
-    const rawSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+    const rawSleepTime = getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME');
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
 
     // Preconditions + fetch PercyDOM + get responsive width/height pairs from CLI
     cy.then({ timeout: CY_TIMEOUT }, async () => {
       if (Cypress.config('isInteractive') && !Cypress.config('enablePercyInteractiveMode')) {
-        Cypress.env('__percySkip', true);
+        _percySkip = true;
         return;
       }
       if (!await utils.isPercyEnabled()) {
-        Cypress.env('__percySkip', true);
+        _percySkip = true;
         return;
       }
-      Cypress.env('__percyDOMScript', await utils.fetchPercyDOM());
+      _percyDOMScript = await utils.fetchPercyDOM();
 
       if (utils.getResponsiveWidths) {
-        Cypress.env('__percyWidthHeights', JSON.stringify(await utils.getResponsiveWidths(options.widths || [])));
+        _percyWidthHeights = await utils.getResponsiveWidths(options.widths || []);
       } else {
-        Cypress.env('__percyWidthHeights', JSON.stringify((options.widths || [originalWidth]).map(w => ({ width: w, height: null }))));
+        _percyWidthHeights = (options.widths || [originalWidth]).map(w => ({ width: w, height: null }));
       }
     });
 
     cy.task('percy:clearSnapshots', null, { log: false });
-    cy.url({ log: false }).then(url => Cypress.env('__percyBaseUrl', url));
+    cy.url({ log: false }).then(url => { _percyBaseUrl = url; });
 
-    const useMinHeight = Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+    const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
     const minHeight = useMinHeight ? (options.minHeight || utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
 
     // Iterate widths: viewport → (optional reload) → serialize → cy.task(store)
     cy.then(() => {
-      if (Cypress.env('__percySkip')) return;
-      const widthHeights = JSON.parse(Cypress.env('__percyWidthHeights') || '[]');
+      if (_percySkip) return;
+      const widthHeights = _percyWidthHeights || [];
 
       for (const { width, height: configHeight } of widthHeights) {
         const w = width;
@@ -187,17 +208,16 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         if (needsReload) {
           cy.then(() => {
-            if (Cypress.env('__percySkip')) return;
-            const baseUrl = Cypress.env('__percyBaseUrl');
-            if (baseUrl) cy.visit(baseUrl, { log: false });
+            if (_percySkip) return;
+            if (_percyBaseUrl) cy.visit(_percyBaseUrl, { log: false });
           });
         }
 
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
         cy.document({ log: false }).then(async doc => {
-          if (Cypress.env('__percySkip')) return;
-          if (!Cypress.env('__percyDOMScript')) return;
+          if (_percySkip) return;
+          if (!_percyDOMScript) return;
 
           // Re-inject PercyDOM (may have been lost after page reload)
           if (!window.PercyDOM) {
@@ -217,11 +237,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     // Collect all snapshots from Node.js and post ONE snapshot
     cy.task('percy:getSnapshots', null, { log: false }).then(snapshots => {
-      if (!snapshots || snapshots.length === 0 || Cypress.env('__percySkip')) {
-        Cypress.env('__percySkip', undefined);
-        Cypress.env('__percyDOMScript', undefined);
-        Cypress.env('__percyBaseUrl', undefined);
-        Cypress.env('__percyWidthHeights', undefined);
+      if (!snapshots || snapshots.length === 0 || _percySkip) {
+        _resetResponsiveState();
         return;
       }
 
@@ -240,10 +257,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           log.error(`Failed to post responsive snapshot "${name}"`, err);
         }
 
-        Cypress.env('__percySkip', undefined);
-        Cypress.env('__percyDOMScript', undefined);
-        Cypress.env('__percyBaseUrl', undefined);
-        Cypress.env('__percyWidthHeights', undefined);
+        _resetResponsiveState();
       });
     });
 

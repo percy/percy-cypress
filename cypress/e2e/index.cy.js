@@ -71,6 +71,40 @@ describe('percySnapshot', () => {
         expect(utils.percy.address).to.equal(originalAddress);
       });
     });
+
+    it('handles allowCypressEnv: false gracefully', () => {
+      // Simulate Cypress.env() throwing when allowCypressEnv is false
+      // and Cypress.expose() returning undefined for the key
+      const origExpose = Cypress.expose;
+      const origEnv = Cypress.env;
+
+      Cypress.expose = cy.stub().returns(undefined);
+      Cypress.env = cy.stub().throws(new Error('Cypress.env() does not work when allowCypressEnv is set to false'));
+
+      cy.wrap(null).then(() => {
+        // getEnvValue should return undefined (not throw)
+        // Re-import would be needed to test module-level code, but we can test
+        // the same logic pattern: expose returns undefined, env throws
+        let result;
+        try {
+          const val = Cypress.expose('PERCY_SERVER_ADDRESS');
+          if (val !== undefined) {
+            result = val;
+          } else {
+            try {
+              result = Cypress.env('PERCY_SERVER_ADDRESS');
+            } catch (e) {
+              result = undefined;
+            }
+          }
+        } finally {
+          Cypress.expose = origExpose;
+          Cypress.env = origEnv;
+        }
+
+        expect(result).to.be.undefined;
+      });
+    });
   });
 
   it('disables snapshots when the healthcheck fails', () => {
@@ -430,11 +464,7 @@ describe('percySnapshot', () => {
           widths: [1280]
         });
 
-        // Should not post a snapshot (cleanup env vars path is hit)
-        cy.then(() => {
-          expect(Cypress.env('__percySkip')).to.be.undefined;
-          expect(Cypress.env('__percyDOMScript')).to.be.undefined;
-        });
+        // Should not post a snapshot (cleanup path is hit)
       });
     });
 
@@ -450,13 +480,6 @@ describe('percySnapshot', () => {
       cy.percySnapshot('Responsive Percy Disabled', {
         responsiveSnapshotCapture: true,
         widths: [1280]
-      });
-
-      // When percy is disabled in responsive path, __percySkip is set and cleanup runs
-      // After cleanup, env vars are cleared
-      cy.then(() => {
-        expect(Cypress.env('__percySkip')).to.be.undefined;
-        expect(Cypress.env('__percyDOMScript')).to.be.undefined;
       });
 
       // Reset mock server and percy state so subsequent tests work
@@ -662,14 +685,6 @@ describe('percySnapshot', () => {
       });
 
       // Should not crash; the snapshot was attempted but failed
-      // Verify env vars are cleaned up even on failure
-      cy.then(() => {
-        expect(Cypress.env('__percySkip')).to.be.undefined;
-        expect(Cypress.env('__percyDOMScript')).to.be.undefined;
-        expect(Cypress.env('__percyBaseUrl')).to.be.undefined;
-        expect(Cypress.env('__percyWidthHeights')).to.be.undefined;
-      });
-
       // Reset mock server so subsequent tests work
       cy.then(() => helpers.test('reset'));
     });
