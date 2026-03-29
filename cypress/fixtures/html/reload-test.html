@@ -20,12 +20,13 @@
         // Simply resizing the browser window later will NOT trigger this again.
         window.onload = function() {
             const nav = document.getElementById("nav");
-            
-            if (window.innerWidth >= 768) {
-                nav.innerHTML = "<h2>🖥️ Massive Desktop Menu</h2><p>Home | About | Services | Products | Careers | Contact</p>";
+            const w = window.innerWidth;
+
+            if (w >= 768) {
+                nav.innerHTML = "<h2>🖥️ Massive Desktop Menu</h2><p>Home | About | Services | Products | Careers | Contact</p><p style='color:gray;font-size:12px;'>window.innerWidth = " + w + "px</p>";
                 nav.style.backgroundColor = "lightblue";
             } else {
-                nav.innerHTML = "<h2>📱 Mobile Menu</h2><p>☰ Tap Here</p>";
+                nav.innerHTML = "<h2>📱 Mobile Menu</h2><p>☰ Tap Here</p><p style='color:gray;font-size:12px;'>window.innerWidth = " + w + "px</p>";
                 nav.style.backgroundColor = "lightgreen";
             }
         };
