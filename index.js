@@ -1,16 +1,6 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 
-// PercyDOM script execution — uses indirect global eval to inject the PercyDOM
-// serialization library into the browser context. The script is fetched from the
-// trusted local Percy CLI server (localhost:5338), not from user input.
-/* eslint-disable no-eval */
-const execScript = {
-  run: (s) => (0, eval)(s),
-  runInFrame: (w, s) => w.eval(s)
-};
-/* eslint-enable no-eval */
-
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
@@ -69,8 +59,15 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
-            execScript.runInFrame(frameWindow, percyDOMScript);
-            iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
+            if (!frameWindow.PercyDOM) {
+              const script = frameDocument.createElement('script');
+              script.textContent = percyDOMScript;
+              frameDocument.head.appendChild(script);
+              frameDocument.head.removeChild(script);
+            }
+            if (frameWindow.PercyDOM) {
+              iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
+            }
           }
         } catch (accessError) {
           log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
@@ -204,9 +201,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
           // Re-inject PercyDOM (may have been lost after page reload)
           if (!window.PercyDOM) {
-            execScript.run(await utils.fetchPercyDOM());
+            // eslint-disable-next-line no-eval
+            eval(await utils.fetchPercyDOM());
           }
-          if (window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
+          if (window.PercyDOM && window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
           dom.width = w;
@@ -266,7 +264,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     await withLog(async () => {
       if (!window.PercyDOM) {
-        execScript.run(await utils.fetchPercyDOM());
+        // eslint-disable-next-line no-eval
+        eval(await utils.fetchPercyDOM());
       }
     }, 'injecting @percy/dom');
 
