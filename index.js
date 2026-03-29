@@ -1,6 +1,15 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
-const { injectPercyDOM, injectPercyDOMInFrame } = require('./percyDOMHelper');
+
+// PercyDOM script execution — uses indirect global eval to inject the PercyDOM
+// serialization library into the browser context. The script is fetched from the
+// trusted local Percy CLI server (localhost:5338), not from user input.
+/* eslint-disable no-eval */
+const execScript = {
+  run: (s) => (0, eval)(s),
+  runInFrame: (w, s) => w.eval(s)
+};
+/* eslint-enable no-eval */
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
@@ -60,7 +69,7 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
-            injectPercyDOMInFrame(frameWindow, percyDOMScript);
+            execScript.runInFrame(frameWindow, percyDOMScript);
             iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
           }
         } catch (accessError) {
@@ -195,7 +204,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
           // Re-inject PercyDOM (may have been lost after page reload)
           if (!window.PercyDOM) {
-            injectPercyDOM(await utils.fetchPercyDOM());
+            execScript.run(await utils.fetchPercyDOM());
           }
           if (window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
@@ -257,7 +266,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     await withLog(async () => {
       if (!window.PercyDOM) {
-        injectPercyDOM(await utils.fetchPercyDOM());
+        execScript.run(await utils.fetchPercyDOM());
       }
     }, 'injecting @percy/dom');
 
