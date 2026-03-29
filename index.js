@@ -94,7 +94,6 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
-
 // Internal state for responsive capture (closure variables, not Cypress.env)
 let _percySkip = false;
 let _percyDOMScript = null;
@@ -112,7 +111,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
 
   lazyResolveAddress(log);
-
 
   if (typeof name === 'object') {
     options = name;
@@ -183,7 +181,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     cy.url({ log: false }).then(url => { _percyBaseUrl = url; });
 
     const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const minHeight = useMinHeight ? ( utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
+    const minHeight = useMinHeight ? (utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
 
     cy.then(() => {
       /* istanbul ignore next -- guard: browser-side early return when Percy is disabled */
