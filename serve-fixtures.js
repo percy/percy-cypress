@@ -15,15 +15,16 @@ const server = http.createServer((req, res) => {
   // Strip query params before resolving file path
   const urlPath = new URL(req.url, `http://localhost:${PORT}`).pathname;
   const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
-  const filePath = path.join(FIXTURES_DIR, safePath === '/' ? 'standard-snapshot.html' : safePath);
+  const requestedPath = safePath === '/' ? '/standard-snapshot.html' : safePath;
+  const resolvedPath = path.resolve(FIXTURES_DIR, '.' + requestedPath);
 
-  if (!filePath.startsWith(FIXTURES_DIR)) {
+  if (!resolvedPath.startsWith(FIXTURES_DIR + path.sep)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
 
-  fs.readFile(filePath, (err, data) => {
+  fs.readFile(resolvedPath, (err, data) => {
     if (err) {
       res.writeHead(404);
       res.end('Not Found');
