@@ -1,0 +1,8 @@
+# Node modules
+node_modules/
+
+# Test fixtures (HTML files with inline scripts)
+cypress/fixtures/
+
+# Build output
+dist/

@@ -19,18 +19,17 @@ utils.request.fetch = async function fetch(url, options) {
 };
 
 // Inject PercyDOM script into the current window context.
-// Uses Function constructor to execute the script (same as eval but in global scope).
 // The script is fetched from the local Percy CLI server (localhost:5338/percy/dom.js)
 // and is NOT user input — it's a trusted internal script.
-// nosemgrep: javascript.browser.security.eval-detected.eval-detected
 function injectPercyDOM(scriptContent) {
-  (0, eval)(scriptContent); // eslint-disable-line no-eval -- indirect eval for trusted PercyDOM script from Percy CLI server
+  // eslint-disable-next-line no-eval
+  (0, eval)(scriptContent); // nosemgrep: javascript.browser.security.eval-detected.eval-detected
 }
 
 // Inject PercyDOM into an iframe's window context
-// nosemgrep: javascript.browser.security.eval-detected.eval-detected
 function injectPercyDOMInFrame(frameWindow, scriptContent) {
-  frameWindow.eval(scriptContent); // eslint-disable-line no-eval -- must use frameWindow.eval to inject into iframe context
+  // eslint-disable-next-line no-eval
+  frameWindow.eval(scriptContent); // nosemgrep: javascript.browser.security.eval-detected.eval-detected
 }
 
 function cylog(message, meta) {
