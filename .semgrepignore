@@ -6,3 +6,6 @@ cypress/fixtures/
 
 # Build output
 dist/
+
+# Local-only test fixture server (not production code)
+serve-fixtures.js
