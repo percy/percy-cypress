@@ -59,8 +59,7 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
-            // eslint-disable-next-line no-eval
-            frameWindow.eval(percyDOMScript);
+            new frameWindow.Function(percyDOMScript)(); // eslint-disable-line no-new-func -- PercyDOM injection into iframe
             iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
           }
         } catch (accessError) {
@@ -134,19 +133,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  // =====================================================================
-  // RESPONSIVE CAPTURE PATH (cy.task Node-side state)
-  //
-  // Uses isResponsiveDOMCaptureValid as the main gate.
-  // Inside, checks PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE for reload.
-  //
-  // Features from captureResponsiveDOM merged here:
-  // - utils.getResponsiveWidths() for width/height pairs
-  // - PercyDOM.waitForResize() before serialize
-  // - PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT for viewport height
-  // - PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME between captures
-  // - PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE for page reload
-  // =====================================================================
   const needsResponsiveCapture = isResponsiveDOMCaptureValid(options);
   const needsReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
@@ -207,8 +193,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           const script = Cypress.env('__percyDOMScript');
           if (!script) return;
 
-          // eslint-disable-next-line no-eval
-          eval(script);
+          new Function(script)(); // eslint-disable-line no-new-func -- PercyDOM injection from trusted Percy CLI server
           if (window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
@@ -269,8 +254,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     await withLog(async () => {
       if (!window.PercyDOM) {
-        // eslint-disable-next-line no-eval
-        eval(await utils.fetchPercyDOM());
+        new Function(await utils.fetchPercyDOM())(); // eslint-disable-line no-new-func -- PercyDOM injection from trusted Percy CLI server
       }
     }, 'injecting @percy/dom');
 
