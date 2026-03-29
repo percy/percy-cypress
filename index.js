@@ -1,5 +1,6 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
+const { injectPercyDOM, injectPercyDOMInFrame } = require('./percyDOMHelper');
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
@@ -17,22 +18,6 @@ utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
   return Cypress.backend('http:request', options);
 };
-
-// Inject PercyDOM script into the current window context.
-// The script is fetched from the local Percy CLI server (localhost:5338/percy/dom.js)
-// and is NOT user input — it's a trusted internal script.
-// nosemgrep: javascript.browser.security.eval-detected.eval-detected
-function injectPercyDOM(scriptContent) {
-  // eslint-disable-next-line no-eval
-  (0, eval)(scriptContent); // nosemgrep
-}
-
-// Inject PercyDOM into an iframe's window context.
-// nosemgrep: javascript.browser.security.eval-detected.eval-detected
-function injectPercyDOMInFrame(frameWindow, scriptContent) {
-  // eslint-disable-next-line no-eval
-  frameWindow.eval(scriptContent); // nosemgrep
-}
 
 function cylog(message, meta) {
   Cypress.log({
@@ -204,12 +189,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-        cy.document({ log: false }).then(doc => {
+        cy.document({ log: false }).then(async doc => {
           if (Cypress.env('__percySkip')) return;
-          const script = Cypress.env('__percyDOMScript');
-          if (!script) return;
+          if (!Cypress.env('__percyDOMScript')) return;
 
-          injectPercyDOM(script);
+          // Re-inject PercyDOM (may have been lost after page reload)
+          if (!window.PercyDOM) {
+            injectPercyDOM(await utils.fetchPercyDOM());
+          }
           if (window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
