@@ -96,8 +96,6 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
   }
 }
 
-// Checks responsiveSnapshotCapture flag (camelCase, snake_case, or Percy config)
-// Returns false if deferUploads is enabled
 function isResponsiveDOMCaptureValid(options) {
   if (utils.percy?.config?.percy?.deferUploads) return false;
   return (
@@ -123,6 +121,22 @@ function _resetResponsiveState() {
 
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
+
+  // Lazy address resolution: if getEnvValue() at module load didn't find the address
+  // (e.g., CYPRESS_PERCY_SERVER_ADDRESS with allowCypressEnv: false puts it in the
+  // secure store, accessible only via async cy.env()), try cy.env() as last resort.
+  if (!utils.percy.address) {
+    try {
+      if (typeof cy.env === 'function') {
+        cy.env(['PERCY_SERVER_ADDRESS']).then((result) => {
+          const addr = result && result.PERCY_SERVER_ADDRESS;
+          if (addr) utils.percy.address = addr;
+        });
+      }
+    } catch (e) {
+      log.debug('Could not resolve Percy CLI address from environment variables', e);
+    }
+  }
 
   if (typeof name === 'object') {
     options = name;
@@ -264,9 +278,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     return;
   }
 
-  // =====================================================================
-  // STANDARD PATH (single DOM capture)
-  // =====================================================================
   return cy.then({ timeout: CY_TIMEOUT }, async () => {
     if (Cypress.config('isInteractive') && !Cypress.config('enablePercyInteractiveMode')) {
       return cylog('Disabled in interactive mode', { details: 'use "cypress run" instead of "cypress open"', name });
