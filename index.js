@@ -201,6 +201,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
           // Re-inject PercyDOM (may have been lost after page reload)
           if (!window.PercyDOM) {
+            // eslint-disable-next-line no-eval
             (0, eval)(await utils.fetchPercyDOM());
           }
           if (window.PercyDOM && window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
@@ -263,6 +264,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     await withLog(async () => {
       if (!window.PercyDOM) {
+        // eslint-disable-next-line no-eval
         (0, eval)(await utils.fetchPercyDOM());
       }
     }, 'injecting @percy/dom');
