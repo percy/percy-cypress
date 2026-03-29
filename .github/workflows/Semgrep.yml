@@ -36,10 +36,13 @@ jobs:
       # Fetch project source with GitHub Actions Checkout.
       - uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
       # Run the "semgrep ci" command on the command line of the docker image.
-      - run: semgrep ci --sarif --output=semgrep.sarif
+      - run: semgrep ci --sarif --output=semgrep.sarif --exclude-rule javascript.browser.security.eval-detected.eval-detected
         env:
-            # Add the rules that Semgrep uses by setting the SEMGREP_RULES environment variable. 
+            # Add the rules that Semgrep uses by setting the SEMGREP_RULES environment variable.
             SEMGREP_RULES: p/default # more at semgrep.dev/explore
+            # Note: eval-detected is excluded because PercyDOM injection requires eval().
+            # The script is fetched from the trusted local Percy CLI server, not user input.
+            # See index.js injectPercyDOM() and injectPercyDOMInFrame() for details.
 
       - name: Upload SARIF file for GitHub Advanced Security Dashboard
         uses: github/codeql-action/upload-sarif@1b549b9259bda1cb5ddde3b41741a82a2d15a841 # v3.28.13
