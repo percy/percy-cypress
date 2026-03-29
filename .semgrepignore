@@ -6,7 +6,3 @@ cypress/fixtures/
 
 # Build output
 dist/
-
-# PercyDOM injection helper — uses eval() intentionally for trusted script injection.
-# The script comes from the local Percy CLI server, not user input.
-percyDOMHelper.js
