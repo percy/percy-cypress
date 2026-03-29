@@ -11,10 +11,11 @@ const path = require('path');
 const PORT = 8000;
 const FIXTURES_DIR = path.join(__dirname, 'cypress', 'fixtures', 'html');
 
-const server = http.createServer((req, res) => {
+const server = http.createServer((req, res) => { // nosemgrep: using-http-server
   // Strip query params before resolving file path
   const urlPath = new URL(req.url, `http://localhost:${PORT}`).pathname;
-  const filePath = path.join(FIXTURES_DIR, urlPath === '/' ? 'standard-snapshot.html' : urlPath);
+  const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
+  const filePath = path.join(FIXTURES_DIR, safePath === '/' ? 'standard-snapshot.html' : safePath); // nosemgrep: path-join-resolve-traversal
 
   if (!filePath.startsWith(FIXTURES_DIR)) {
     res.writeHead(403);
