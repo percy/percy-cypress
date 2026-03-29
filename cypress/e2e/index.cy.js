@@ -813,26 +813,14 @@ describe('percySnapshot', () => {
     });
 
     it('handles cross-origin iframe where content access throws', () => {
-      // Add a cross-origin iframe and override contentWindow to throw
+      // Add a cross-origin iframe with sandbox to ensure cross-origin restriction.
+      // The browser blocks contentWindow access, exercising the catch(accessError) block.
       cy.document().then(doc => {
         const iframe = doc.createElement('iframe');
         iframe.setAttribute('src', 'https://cross-origin-throws.example.com/page');
         iframe.setAttribute('data-percy-element-id', 'throws-iframe');
+        iframe.setAttribute('sandbox', '');
         doc.body.appendChild(iframe);
-      });
-
-      // Override contentWindow AFTER the iframe is in the DOM
-      // percySnapshot's processCrossOriginIframes runs AFTER serialize,
-      // and serialize doesn't affect property descriptors on the original DOM
-      cy.wait(100);
-      cy.document().then(doc => {
-        const iframe = doc.querySelector('iframe[data-percy-element-id="throws-iframe"]');
-        if (iframe) {
-          Object.defineProperty(iframe, 'contentWindow', {
-            get() { throw new DOMException('Blocked a frame with origin'); },
-            configurable: true
-          });
-        }
       });
 
       cy.percySnapshot('Iframe Throws Test');
