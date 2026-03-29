@@ -105,6 +105,43 @@ describe('percySnapshot', () => {
         expect(result).to.be.undefined;
       });
     });
+
+    it('lazy-resolves address via cy.env() when utils.percy.address is unset', () => {
+      const utils = require('@percy/sdk-utils');
+
+      // Clear address INSIDE the command queue so it's unset when percySnapshot runs.
+      // This triggers the lazy resolution block (lines 128-134).
+      cy.then(() => {
+        utils.percy.address = null;
+      });
+
+      cy.percySnapshot('lazy-resolve-test');
+
+      // Restore address for subsequent tests
+      cy.then(() => {
+        utils.percy.address = `http://localhost:${helpers.port}`;
+      });
+    });
+
+    it('handles cy.env() failure during lazy address resolution gracefully', () => {
+      const utils = require('@percy/sdk-utils');
+      let origCyEnv;
+
+      // Clear address and break cy.env INSIDE the command queue
+      // to exercise the catch block (lines 136-138)
+      cy.then(() => {
+        origCyEnv = cy.env;
+        utils.percy.address = null;
+        cy.env = function() { throw new Error('cy.env not available'); };
+      });
+
+      cy.percySnapshot('lazy-resolve-error-test');
+
+      cy.then(() => {
+        cy.env = origCyEnv;
+        utils.percy.address = `http://localhost:${helpers.port}`;
+      });
+    });
   });
 
   it('disables snapshots when the healthcheck fails', () => {

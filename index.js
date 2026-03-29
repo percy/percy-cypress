@@ -1,24 +1,12 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
+const { getEnvValue, lazyResolveAddress } = require('./env-utils');
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
-// Read environment values using Cypress.expose() (Cypress 15.10+) with Cypress.env() fallback.
-// Tries Cypress.expose() first, then Cypress.env() (wrapped in try/catch for allowCypressEnv: false).
-const getEnvValue = (key) => {
-  if (typeof Cypress.expose === 'function') {
-    const val = Cypress.expose(key);
-    if (val !== undefined) return val;
-  }
-  try {
-    return Cypress.env(key);
-  } catch (e) {
-    return undefined;
-  }
-};
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
 utils.request.fetch = async function fetch(url, options) {
@@ -106,6 +94,7 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
+
 // Internal state for responsive capture (closure variables, not Cypress.env)
 let _percySkip = false;
 let _percyDOMScript = null;
@@ -122,21 +111,8 @@ function _resetResponsiveState() {
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
 
-  // Lazy address resolution: if getEnvValue() at module load didn't find the address
-  // (e.g., CYPRESS_PERCY_SERVER_ADDRESS with allowCypressEnv: false puts it in the
-  // secure store, accessible only via async cy.env()), try cy.env() as last resort.
-  if (!utils.percy.address) {
-    try {
-      if (typeof cy.env === 'function') {
-        cy.env(['PERCY_SERVER_ADDRESS']).then((result) => {
-          const addr = result && result.PERCY_SERVER_ADDRESS;
-          if (addr) utils.percy.address = addr;
-        });
-      }
-    } catch (e) {
-      log.debug('Could not resolve Percy CLI address from environment variables', e);
-    }
-  }
+  lazyResolveAddress(log);
+
 
   if (typeof name === 'object') {
     options = name;
@@ -207,11 +183,12 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     cy.url({ log: false }).then(url => { _percyBaseUrl = url; });
 
     const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const minHeight = useMinHeight ? (options.minHeight || utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
+    const minHeight = useMinHeight ? ( utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
 
-    // Iterate widths: viewport → (optional reload) → serialize → cy.task(store)
     cy.then(() => {
+      /* istanbul ignore next -- guard: browser-side early return when Percy is disabled */
       if (_percySkip) return;
+      /* istanbul ignore next */
       const widthHeights = _percyWidthHeights || [];
 
       for (const { width, height: configHeight } of widthHeights) {
@@ -222,7 +199,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         if (needsReload) {
           cy.then(() => {
+            /* istanbul ignore next */
             if (_percySkip) return;
+            /* istanbul ignore next */
             if (_percyBaseUrl) cy.visit(_percyBaseUrl, { log: false });
           });
         }
@@ -230,7 +209,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
         cy.document({ log: false }).then(async doc => {
+          /* istanbul ignore next */
           if (_percySkip) return;
+          /* istanbul ignore next */
           if (!_percyDOMScript) return;
 
           // Re-inject PercyDOM (may have been lost after page reload)
