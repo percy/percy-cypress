@@ -15,13 +15,11 @@ describe('percySnapshot', () => {
     let originalExpose;
 
     beforeEach(() => {
-      // Store original methods
       originalEnv = Cypress.env;
       originalExpose = Cypress.expose;
     });
 
     afterEach(() => {
-      // Restore original methods
       if (originalEnv) {
         Cypress.env = originalEnv;
       }
@@ -36,12 +34,9 @@ describe('percySnapshot', () => {
       const utils = require('@percy/sdk-utils');
       const testAddress = 'http://test-expose-address:5338';
 
-      // Mock Cypress.expose
       Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(testAddress);
 
-      // Reload the module to trigger the env configuration code
       cy.wrap(null).then(() => {
-        // Simulate the configuration logic
         if (typeof Cypress.expose === 'function') {
           const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
           if (addr) utils.percy.address = addr;
@@ -56,18 +51,15 @@ describe('percySnapshot', () => {
       const utils = require('@percy/sdk-utils');
       const originalAddress = utils.percy.address;
 
-      // Mock Cypress.expose to return undefined
       Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
 
       cy.wrap(null).then(() => {
-        // Simulate the configuration logic
         if (typeof Cypress.expose === 'function') {
           const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
           if (addr) utils.percy.address = addr;
         }
 
         expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // Address should remain unchanged
         expect(utils.percy.address).to.equal(originalAddress);
       });
     });
@@ -257,7 +249,7 @@ describe('percySnapshot', () => {
       cy.wrap(null).then(() => {
         return withRetryAndLog(utils.postSnapshot).catch((error) => {
           expect(error.message).to.equal('postSnapshot failed');
-          expect(retryCount).to.equal(3); // Ensure postSnapshot was called 3 times
+          expect(retryCount).to.equal(3);
         });
       });
     });
@@ -336,6 +328,222 @@ describe('percySnapshot', () => {
     const region = createRegion({ algorithm: 'standard', adsEnabled: true });
     expect(region).to.have.property('configuration');
     expect(region.configuration).to.have.property('adsEnabled', true);
+  });
+
+  describe('crossOriginIframes', () => {
+    it('captures cross-origin iframes with accessible contentDocument', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'https://external.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'iframe-abc123');
+        dom.body.appendChild(iframe);
+
+        const mockDoc = dom.implementation.createHTMLDocument('iframe');
+        mockDoc.body.innerHTML = '<h1>Cross-origin content</h1>';
+
+        const mockSerializeResult = { html: '<html><body><h1>Cross-origin content</h1></body></html>' };
+
+        const mockWindow = {
+          PercyDOM: {
+            serialize: cy.stub().returns(mockSerializeResult)
+          }
+        };
+
+        Object.defineProperty(iframe, 'contentDocument', { value: mockDoc, configurable: true });
+        Object.defineProperty(iframe, 'contentWindow', { value: mockWindow, configurable: true });
+
+        const iframes = dom.querySelectorAll('iframe[src="https://external.example.com/page"]');
+        expect(iframes.length).to.equal(1);
+
+        expect(iframes[0].getAttribute('data-percy-element-id')).to.equal('iframe-abc123');
+        expect(iframes[0].contentDocument).to.not.be.null;
+        expect(iframes[0].contentWindow.PercyDOM).to.not.be.undefined;
+
+        dom.body.removeChild(iframe);
+      });
+    });
+
+    it('attaches corsIframes to domSnapshot when cross-origin iframes exist', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'https://external.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'iframe-test-id');
+        dom.body.appendChild(iframe);
+
+        const mockDoc = dom.implementation.createHTMLDocument('iframe');
+        mockDoc.body.innerHTML = '<p>External content</p>';
+        const mockSerializeResult = { html: '<html><body><p>External content</p></body></html>' };
+
+        Object.defineProperty(iframe, 'contentDocument', { value: mockDoc, configurable: true });
+        Object.defineProperty(iframe, 'contentWindow', {
+          value: {
+            PercyDOM: { serialize: cy.stub().returns(mockSerializeResult) }
+          },
+          configurable: true
+        });
+
+        cy.percySnapshot('Cross-origin iframe test');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Cross-origin iframe test');
+    });
+
+    it('skips iframes with about:blank src', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'about:blank');
+        iframe.setAttribute('data-percy-element-id', 'iframe-blank');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Skip about:blank iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Skip about:blank iframe');
+    });
+
+    it('skips iframes with javascript: src', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'javascript:void(0)');
+        iframe.setAttribute('data-percy-element-id', 'iframe-js');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Skip javascript iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Skip javascript iframe');
+    });
+
+    it('skips iframes with data: src', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'data:text/html,<h1>test</h1>');
+        iframe.setAttribute('data-percy-element-id', 'iframe-data');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Skip data iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Skip data iframe');
+    });
+
+    it('skips iframes with srcdoc attribute', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'https://external.example.com/page');
+        iframe.setAttribute('srcdoc', '<h1>Inline content</h1>');
+        iframe.setAttribute('data-percy-element-id', 'iframe-srcdoc');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Skip srcdoc iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Skip srcdoc iframe');
+    });
+
+    it('handles SecurityError when iframe access is blocked', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'https://external.example.com/blocked');
+        iframe.setAttribute('data-percy-element-id', 'iframe-blocked');
+        dom.body.appendChild(iframe);
+
+        Object.defineProperty(iframe, 'contentDocument', {
+          get: () => { throw new DOMException('Blocked by CORS', 'SecurityError'); },
+          configurable: true
+        });
+
+        cy.percySnapshot('SecurityError iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: SecurityError iframe');
+    });
+
+    it('skips same-origin iframes', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const currentOrigin = new URL(dom.URL).origin;
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', `${currentOrigin}/some-page`);
+        iframe.setAttribute('data-percy-element-id', 'iframe-same-origin');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Same-origin iframe skipped');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Same-origin iframe skipped');
+    });
+
+    it('skips iframes without src attribute', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('data-percy-element-id', 'iframe-no-src');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('No src iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No src iframe');
+    });
+
+    it('skips iframes with blob: src', () => {
+      cy.visit(helpers.testSnapshotURL);
+
+      cy.document().then((dom) => {
+        const iframe = dom.createElement('iframe');
+        iframe.setAttribute('src', 'blob:https://example.com/some-blob');
+        iframe.setAttribute('data-percy-element-id', 'iframe-blob');
+        dom.body.appendChild(iframe);
+
+        cy.percySnapshot('Skip blob iframe');
+
+        dom.body.removeChild(iframe);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Skip blob iframe');
+    });
   });
 
   describe('New Feature Tests', () => {

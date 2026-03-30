@@ -1,15 +1,12 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 
-// Collect client and environment information
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
-// asset discovery should timeout before this
-// 1.5 times the 30 second nav timeout
+// asset discovery should timeout before this (1.5 times the 30 second nav timeout)
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
-// Maybe set the CLI API address from the environment
 // Support both new and legacy methods for backward compatibility
 
 const getPercyServerAddress = () => {
@@ -19,13 +16,11 @@ const getPercyServerAddress = () => {
 };
 utils.percy.address = getPercyServerAddress();
 
-// Use Cypress's http:request backend task
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
   return Cypress.backend('http:request', options);
 };
 
-// Create Cypress log messages
 function cylog(message, meta) {
   Cypress.log({
     name: 'percySnapshot',
@@ -35,16 +30,100 @@ function cylog(message, meta) {
   });
 }
 
-// Take a DOM snapshot and post it to the snapshot endpoint
+// Skip protocols that cannot be accessed (javascript:, data:, etc.)
+const SKIPPED_IFRAME_PREFIXES = [
+  'javascript:',
+  'data:',
+  'vbscript:',
+  'blob:',
+  'chrome:',
+  'chrome-extension:'
+];
+
+function processCrossOriginIframes(dom, options, log) {
+  const processedFrames = [];
+
+  try {
+    const currentUrl = new URL(dom.URL);
+    const iframes = dom.querySelectorAll('iframe');
+
+    for (const iframe of iframes) {
+      const src = iframe.getAttribute('src');
+      const srcdoc = iframe.getAttribute('srcdoc');
+
+      // Skip iframes without src, with srcdoc, or with unsupported protocols
+      if (
+        !src ||
+        srcdoc ||
+        src === 'about:blank' ||
+        src === 'about:srcdoc' ||
+        SKIPPED_IFRAME_PREFIXES.some(prefix => src.startsWith(prefix))
+      ) continue;
+
+      try {
+        const frameUrl = new URL(src, currentUrl.href);
+
+        // Only process cross-origin iframes
+        if (frameUrl.origin !== currentUrl.origin) {
+          log.debug(`Processing cross-origin iframe: ${frameUrl.href}`);
+          const percyElementId = iframe.getAttribute('data-percy-element-id');
+
+          if (!percyElementId) {
+            log.debug(`Skipping frame ${frameUrl.href}: no data-percy-element-id found`);
+            continue;
+          }
+
+          try {
+            // Requires chromeWebSecurity: false to access cross-origin contentDocument
+            const iframeDoc = iframe.contentDocument;
+            const iframeWin = iframe.contentWindow;
+
+            if (!iframeDoc || !iframeWin) {
+              log.debug(`Skipping frame ${frameUrl.href}: contentDocument not accessible`);
+              continue;
+            }
+
+            if (!iframeWin.PercyDOM) {
+              /* istanbul ignore next: no instrumenting injected code */
+              iframeWin.PercyDOM = window.PercyDOM;
+            }
+
+            /* istanbul ignore next: no instrumenting injected code */
+            const iframeSnapshot = iframeWin.PercyDOM.serialize({
+              ...options,
+              dom: iframeDoc,
+              enableJavaScript: true
+            });
+
+            log.debug(`Successfully captured cross-origin iframe: ${frameUrl.href}`);
+            processedFrames.push({
+              iframeData: { percyElementId },
+              iframeSnapshot,
+              frameUrl: frameUrl.href
+            });
+          } catch (e) {
+            // Typically SecurityError when chromeWebSecurity: false is not configured
+            log.debug(`Could not access iframe "${frameUrl.href}": ${e.message}`);
+          }
+        }
+      } catch (e) {
+        log.debug(`Skipping iframe "${src}": ${e.message}`);
+      }
+    }
+  } catch (e) {
+    log.debug(`Error during cross-origin iframe processing: ${e.message}`);
+  }
+
+  return processedFrames;
+}
+
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let log = utils.logger('cypress');
 
-  // if name is not passed
   if (typeof name === 'object') {
     options = name;
     name = undefined;
   }
-  // Default name to test title
   name = name || cy.state('runnable').fullTitle();
 
   const meta = {
@@ -100,21 +179,25 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
 
     await withLog(async () => {
-      // Inject @percy/dom
       if (!window.PercyDOM) {
         // eslint-disable-next-line no-eval
         eval(await utils.fetchPercyDOM());
       }
     }, 'injecting @percy/dom');
 
-    // Serialize and capture the DOM
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async (dom) => {
       /* istanbul ignore next: no instrumenting injected code */
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');
 
-      // Capture cookies
+      await withLog(async () => {
+        let processedFrames = processCrossOriginIframes(dom, options, log);
+        if (processedFrames.length > 0) {
+          domSnapshot.corsIframes = processedFrames;
+        }
+      }, 'processing cross-origin iframes', false);
+
       return cy.getCookies({ log: false }).then(async (cookies) => {
         if (cookies && cookies.length > 0) {
           domSnapshot.cookies = cookies;
@@ -123,7 +206,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
         const _throw = throwConfig === undefined ? false : throwConfig;
 
-        // Post the DOM snapshot to Percy
         let response = await withRetry(async () => await withLog(async () => {
           return await utils.postSnapshot({
             ...options,
@@ -135,7 +217,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           });
         }, 'posting dom snapshot', _throw));
 
-        // Log the snapshot name on success
         cylog(name, meta);
 
         return response;
