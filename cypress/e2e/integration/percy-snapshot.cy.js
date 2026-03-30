@@ -9,7 +9,7 @@
  * Prerequisites:
  *   node serve-fixtures.js &          # Start fixture server on port 8000
  *   PERCY_TOKEN=<token> PERCY_BROWSER_EXECUTABLE=<chrome-path> \
- *     npx percy exec -- npx cypress run --spec cypress/e2e/percy-snapshot.cy.js
+ *     npx percy exec -- npx cypress run --spec cypress/e2e/integration/percy-snapshot.cy.js
  */
 
 const FIXTURE_URL = 'http://localhost:8000';

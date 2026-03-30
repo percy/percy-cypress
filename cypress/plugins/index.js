@@ -2,7 +2,6 @@
 // immune to page navigations that destroy browser window state.
 const percyState = {
   snapshots: [],
-  percyDOMScript: null
 };
 
 module.exports = (on, config) => {
@@ -22,7 +21,7 @@ module.exports = (on, config) => {
 
   on('task', {
     'percy:storeSnapshot'({ width, dom }) {
-      percyState.snapshots.push({ width, ...dom });
+      percyState.snapshots.push({...dom, width});
       return percyState.snapshots.length;
     },
 

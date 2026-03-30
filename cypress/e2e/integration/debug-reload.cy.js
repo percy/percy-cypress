@@ -2,7 +2,7 @@ const FIXTURE_URL = 'http://localhost:8000';
 
 describe('Responsive Reload via cy.percySnapshot', () => {
   it('JS page: one snapshot with multiple width DOMs', () => {
-    cy.visit(`${FIXTURE_URL}/responsive-js-test.html`);
+    cy.visit(`${FIXTURE_URL}/responsive-capture.html`);
     cy.get('#content').should('be.visible');
 
     Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');

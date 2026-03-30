@@ -206,7 +206,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-        cy.document({ log: false }).then(async doc => {
+        cy.document({ log: false }).then(doc => {
           /* istanbul ignore next */
           if (_percySkip) return;
           /* istanbul ignore next */
@@ -215,7 +215,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           // Re-inject PercyDOM (may have been lost after page reload)
           if (!window.PercyDOM) {
             // eslint-disable-next-line no-eval
-            (0, eval)(await utils.fetchPercyDOM());
+            (0, eval)(_percyDOMScript);
           }
           if (window.PercyDOM && window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
@@ -266,15 +266,16 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       return cylog('Not running', { name });
     }
 
+    const percyDOMScript = await utils.fetchPercyDOM();
+
     await withLog(async () => {
       if (!window.PercyDOM) {
         // eslint-disable-next-line no-eval
-        (0, eval)(await utils.fetchPercyDOM());
+        (0, eval)(percyDOMScript);
       }
     }, 'injecting @percy/dom');
 
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async dom => {
-      const percyDOMScript = await utils.fetchPercyDOM();
 
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
