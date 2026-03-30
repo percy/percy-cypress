@@ -276,7 +276,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }, 'injecting @percy/dom');
 
     return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async dom => {
-
       let domSnapshot = await withLog(() => {
         return window.PercyDOM.serialize({ ...options, dom });
       }, 'taking dom snapshot');

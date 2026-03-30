@@ -1,7 +1,7 @@
 // Percy responsive snapshot state — stored in Node.js process,
 // immune to page navigations that destroy browser window state.
 const percyState = {
-  snapshots: [],
+  snapshots: []
 };
 
 module.exports = (on, config) => {
@@ -21,7 +21,7 @@ module.exports = (on, config) => {
 
   on('task', {
     'percy:storeSnapshot'({ width, dom }) {
-      percyState.snapshots.push({...dom, width});
+      percyState.snapshots.push({ ...dom, width });
       return percyState.snapshots.length;
     },
 
