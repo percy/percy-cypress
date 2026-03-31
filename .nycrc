@@ -4,6 +4,8 @@
   "functions": 100,
   "statements": 100,
   "exclude": [
-    "cypress/**"
+    "cypress/e2e/**",
+    "cypress/fixtures/**",
+    "cypress/support/**"
   ]
 }
