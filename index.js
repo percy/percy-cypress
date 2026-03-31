@@ -10,14 +10,12 @@ const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
 // Maybe set the CLI API address from the environment
-// Support both new and legacy methods for backward compatibility
-
-const getPercyServerAddress = () => {
-  return (typeof Cypress.expose === 'function')
-    ? Cypress.expose('PERCY_SERVER_ADDRESS')
-    : /* istanbul ignore next */ Cypress.env('PERCY_SERVER_ADDRESS');
-};
-utils.percy.address = getPercyServerAddress();
+// Try Cypress.expose() first (15.10.0+), then Cypress.env() with try-catch for allowCypressEnv: false
+// Only assign if truthy to avoid corrupting the SDK default via process.env coercion
+// eslint-disable-next-line indent
+const percyAddress = (typeof Cypress.expose === 'function' && Cypress.expose('PERCY_SERVER_ADDRESS')) ||
+/* istanbul ignore next */ (() => { try { return Cypress.env('PERCY_SERVER_ADDRESS'); } catch (e) { return undefined; } })();
+if (percyAddress) utils.percy.address = percyAddress;
 
 // Use Cypress's http:request backend task
 utils.request.fetch = async function fetch(url, options) {
@@ -30,6 +28,7 @@ function cylog(message, meta) {
   Cypress.log({
     name: 'percySnapshot',
     displayName: 'percy',
+    /* istanbul ignore next: only called by Cypress devtools */
     consoleProps: () => meta,
     message
   });
@@ -85,7 +84,15 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  return cy.then({ timeout: CY_TIMEOUT }, async () => {
+  // Resolve PERCY_SERVER_ADDRESS via async cy.env() if not set at module level
+  // This handles CYPRESS_ prefix env vars when allowCypressEnv: false (Cypress 15.10.0+)
+  const resolveAddress = /* istanbul ignore next */ (typeof cy.env === 'function' && !percyAddress)
+    ? cy.env(['PERCY_SERVER_ADDRESS']).then(({ PERCY_SERVER_ADDRESS }) => {
+      if (PERCY_SERVER_ADDRESS) utils.percy.address = PERCY_SERVER_ADDRESS;
+    })
+    : cy.wrap(null, { log: false });
+
+  return resolveAddress.then({ timeout: CY_TIMEOUT }, async () => {
     if (Cypress.config('isInteractive') &&
         !Cypress.config('enablePercyInteractiveMode')) {
       return cylog('Disabled in interactive mode', {

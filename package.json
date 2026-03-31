@@ -29,14 +29,14 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "^1.31.8"
+    "@percy/sdk-utils": "^1.31.10"
   },
   "peerDependencies": {
     "cypress": ">=3"
   },
   "devDependencies": {
     "@cypress/code-coverage": "^3.14.7",
-    "@percy/cli": "^1.31.8",
+    "@percy/cli": "^1.31.10",
     "babel-loader": "^10.0.0",
     "babel-plugin-istanbul": "^7.0.1",
     "cypress": "^15.10.0",
