@@ -97,14 +97,14 @@ function isResponsiveDOMCaptureValid(options) {
 // Internal state for responsive capture (closure variables, not Cypress.env)
 let _percySkip = false;
 let _percyDOMScript = null;
-let _percyBaseUrl = null;
 let _percyWidthHeights = null;
+let _percySnapshots = [];
 
 function _resetResponsiveState() {
   _percySkip = false;
   _percyDOMScript = null;
-  _percyBaseUrl = null;
   _percyWidthHeights = null;
+  _percySnapshots = [];
 }
 
 // Shared preconditions: check interactive mode, verify Percy is enabled, and
@@ -197,8 +197,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
     });
 
-    cy.task('percy:clearSnapshots', null, { log: false });
-    cy.url({ log: false }).then(url => { _percyBaseUrl = url; });
+    _percySnapshots = [];
 
     cy.then(() => {
       /* istanbul ignore next -- guard: browser-side early return when Percy is disabled */
@@ -216,12 +215,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         cy.viewport(w, h);
 
         if (needsReload) {
-          cy.then(() => {
-            /* istanbul ignore next */
-            if (_percySkip) return;
-            /* istanbul ignore next */
-            if (_percyBaseUrl) cy.visit(_percyBaseUrl, { log: false });
-          });
+          cy.reload({ log: false });
+          cy.document({ log: false }).its('readyState').should('eq', 'complete');
         }
 
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
@@ -232,13 +227,12 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           /* istanbul ignore next */
           if (!_percyDOMScript) return;
 
-          // Re-inject PercyDOM (may have been lost after page reload)
           injectPercyDOM(_percyDOMScript);
           if (window.PercyDOM && window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
           dom.width = w;
-          cy.task('percy:storeSnapshot', { width: w, dom }, { log: false });
+          _percySnapshots.push(dom);
         });
       }
 
@@ -246,8 +240,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       cy.viewport(originalWidth, originalHeight);
     });
 
-    // Collect all snapshots from Node.js and post ONE snapshot
-    cy.task('percy:getSnapshots', null, { log: false }).then(snapshots => {
+    cy.then(() => {
+      const snapshots = [..._percySnapshots];
+      _percySnapshots = [];
       if (!snapshots || snapshots.length === 0 || _percySkip) {
         _resetResponsiveState();
         return;
