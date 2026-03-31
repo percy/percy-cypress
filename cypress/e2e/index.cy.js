@@ -555,6 +555,29 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('skips DOM serialization when percyDOMScript is unavailable', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalFetch = utils.fetchPercyDOM;
+
+      // Make fetchPercyDOM return null to exercise the _percyDOMScript guard
+      cy.then(() => {
+        utils.fetchPercyDOM = async () => null;
+      });
+
+      cy.percySnapshot('Responsive No DOM Script', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive No DOM Script');
+
+      // Restore
+      cy.then(() => {
+        utils.fetchPercyDOM = originalFetch;
+      });
+    });
+
     it('uses fallback widths when getResponsiveWidths is not available', () => {
       const utils = require('@percy/sdk-utils');
       const originalGetResponsiveWidths = utils.getResponsiveWidths;

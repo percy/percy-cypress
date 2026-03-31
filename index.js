@@ -193,14 +193,12 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
   // Step 2: Capture DOM at each width (flat cy commands — no async nesting)
   cy.then(() => {
-    /* istanbul ignore next */
     if (_skip) return;
 
     // Determine widths to capture
     let widths;
     if (isResponsive) {
       const rawWidths = options.widths || [originalWidth];
-      /* istanbul ignore next: sdk-utils version compatibility */
       widths = rawWidths.map(w => ({ width: w }));
     } else {
       widths = [{ width: null }]; // null = don't resize, capture at current viewport
@@ -233,7 +231,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
       // Serialize DOM and collect snapshot
       cy.document({ log: false }).then(async doc => {
-        /* istanbul ignore next */
         if (_skip || !_percyDOMScript) return;
 
         injectPercyDOM(_percyDOMScript);
@@ -249,13 +246,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
   // Restore viewport after responsive capture
   if (isResponsive) {
-    /* istanbul ignore next: viewport restore — nyc cannot instrument Cypress command queue */
     cy.viewport(originalWidth, originalHeight);
   }
 
   // Step 3: Post snapshot(s) with cookies, retry, and error handling
   cy.then(() => {
-    /* istanbul ignore next */
     if (_skip || _snapshots.length === 0) return;
 
     cy.getCookies({ log: false }).then(cookies => {
@@ -285,7 +280,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           }, 'posting dom snapshot', _throw));
 
           cylog(name, meta);
-          /* istanbul ignore next */
           return response;
         } catch (err) {
           log.error(`Failed to post snapshot "${name}"`, err);
