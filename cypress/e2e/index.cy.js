@@ -626,6 +626,34 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('uses getResponsiveWidths when available for width/height pairs', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalGetResponsiveWidths = utils.getResponsiveWidths;
+
+      cy.then(() => {
+        // Stub getResponsiveWidths to return width/height pairs
+        utils.getResponsiveWidths = async (widths) => {
+          return widths.map(w => ({ width: w, height: 900 }));
+        };
+      });
+
+      cy.percySnapshot('Responsive With CLI Heights', {
+        responsiveSnapshotCapture: true,
+        widths: [1024, 768]
+      });
+
+      cy.then(() => {
+        if (originalGetResponsiveWidths) {
+          utils.getResponsiveWidths = originalGetResponsiveWidths;
+        } else {
+          delete utils.getResponsiveWidths;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive With CLI Heights');
+    });
+
     it('uses fallback widths when getResponsiveWidths is not available', () => {
       const utils = require('@percy/sdk-utils');
       const originalGetResponsiveWidths = utils.getResponsiveWidths;
@@ -640,7 +668,9 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        utils.getResponsiveWidths = originalGetResponsiveWidths;
+        if (originalGetResponsiveWidths) {
+          utils.getResponsiveWidths = originalGetResponsiveWidths;
+        }
       });
 
       cy.then(() => helpers.get('logs'))

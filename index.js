@@ -161,19 +161,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  // --- Unified capture path ---
-  // Both responsive and normal snapshots flow through the same pipeline.
-  // Normal mode: one width (null = don't resize), no reload.
-  // Responsive mode: multiple widths with optional reload.
-
   const isResponsive = isResponsiveDOMCaptureValid(options);
   const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
 
-  // Closure state for collecting snapshots across cy commands
   let _skip = false;
   let _percyDOMScript = null;
+  let _widthHeights = null;
   let _snapshots = [];
 
   // Step 1: Preconditions (async — runs in cy.then)
@@ -189,24 +184,33 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       return;
     }
     _percyDOMScript = preconditions.percyDOMScript;
+
+    // Fetch width/height pairs from CLI (includes per-width height from config)
+    // Fetch width/height pairs from CLI when available (sdk-utils >= 1.31.10)
+    try {
+      if (isResponsive) {
+        _widthHeights = await utils.getResponsiveWidths(options.widths || []);
+      }
+    } catch (e) {
+      // getResponsiveWidths not available in older sdk-utils versions — fallback used in Step 2
+    }
   });
 
   // Step 2: Capture DOM at each width (flat cy commands — no async nesting)
   cy.then(() => {
     if (_skip) return;
 
-    // Determine widths to capture
-    let widths;
+    // Use CLI-provided width/height pairs when available, fallback to raw widths
+    let widthHeights;
     if (isResponsive) {
-      const rawWidths = options.widths || [originalWidth];
-      widths = rawWidths.map(w => ({ width: w }));
+      widthHeights = _widthHeights || (options.widths || [originalWidth]).map(w => ({ width: w }));
     } else {
-      widths = [{ width: null }]; // null = don't resize, capture at current viewport
+      widthHeights = [{ width: null }]; // null = don't resize, capture at current viewport
     }
 
     const useMinHeight = isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const minHeight = useMinHeight
+    const defaultHeight = useMinHeight
       ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
       : originalHeight;
 
@@ -215,10 +219,17 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       : null;
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
 
-    for (const { width } of widths) {
-      // Resize viewport (only for responsive mode with actual widths)
-      if (width !== null) {
-        cy.viewport(width, minHeight);
+    let lastWindowWidth = originalWidth;
+    let lastWindowHeight = defaultHeight;
+
+    for (let { width, height } of widthHeights) {
+      height = height || defaultHeight;
+
+      // Resize viewport only when dimensions change (skip redundant resizes)
+      if (width !== null && (lastWindowWidth !== width || lastWindowHeight !== height)) {
+        cy.viewport(width, height);
+        lastWindowWidth = width;
+        lastWindowHeight = height;
       }
 
       // Reload page at new viewport (responsive + reload mode only)
