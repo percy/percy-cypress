@@ -185,14 +185,12 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
     _percyDOMScript = preconditions.percyDOMScript;
 
-    // Fetch width/height pairs from CLI (includes per-width height from config)
-    // Fetch width/height pairs from CLI when available (sdk-utils >= 1.31.10)
     try {
       if (isResponsive) {
         _widthHeights = await utils.getResponsiveWidths(options.widths || []);
       }
     } catch (e) {
-      // getResponsiveWidths not available in older sdk-utils versions — fallback used in Step 2
+      log.debug('getResponsiveWidths not available — please upgrade @percy/cli to 1.31.10+. Using fallback widths.');
     }
   });
 
