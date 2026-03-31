@@ -99,22 +99,8 @@ function isResponsiveDOMCaptureValid(options) {
   );
 }
 
-// Internal state for responsive capture (closure variables, not Cypress.env)
-let _percySkip = false;
-let _percyDOMScript = null;
-let _percyWidthHeights = null;
-let _percySnapshots = [];
-
-function _resetResponsiveState() {
-  _percySkip = false;
-  _percyDOMScript = null;
-  _percyWidthHeights = null;
-  _percySnapshots = [];
-}
-
 // Shared preconditions: check interactive mode, verify Percy is enabled, and
-// fetch the PercyDOM serialization script. Returns { skip, percyDOMScript }
-// so callers can branch on the result without duplicating checks.
+// fetch the PercyDOM serialization script.
 async function checkPreconditions(log, name) {
   if (Cypress.config('isInteractive') && !Cypress.config('enablePercyInteractiveMode')) {
     return { skip: true, reason: 'interactive' };
@@ -126,7 +112,6 @@ async function checkPreconditions(log, name) {
   return { skip: false, percyDOMScript };
 }
 
-// Inject PercyDOM into the current window if not already present.
 function injectPercyDOM(percyDOMScript) {
   if (!window.PercyDOM) {
     // eslint-disable-next-line no-eval
@@ -176,166 +161,138 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  const needsResponsiveCapture = isResponsiveDOMCaptureValid(options);
-  const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+  // --- Unified capture path ---
+  // Both responsive and normal snapshots flow through the same pipeline.
+  // Normal mode: one width (null = don't resize), no reload.
+  // Responsive mode: multiple widths with optional reload.
 
-  if (needsResponsiveCapture) {
-    const originalWidth = Cypress.config('viewportWidth');
-    const originalHeight = Cypress.config('viewportHeight');
-    const rawSleepTime = getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME');
+  const isResponsive = isResponsiveDOMCaptureValid(options);
+  const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+  const originalWidth = Cypress.config('viewportWidth');
+  const originalHeight = Cypress.config('viewportHeight');
+
+  // Closure state for collecting snapshots across cy commands
+  let _skip = false;
+  let _percyDOMScript = null;
+  let _snapshots = [];
+
+  // Step 1: Preconditions (async — runs in cy.then)
+  cy.then({ timeout: CY_TIMEOUT }, async () => {
+    const preconditions = await checkPreconditions(log, name);
+    if (preconditions.skip) {
+      _skip = true;
+      if (preconditions.reason === 'interactive') {
+        cylog('Disabled in interactive mode', { details: 'use "cypress run" instead of "cypress open"', name });
+      } else {
+        cylog('Not running', { name });
+      }
+      return;
+    }
+    _percyDOMScript = preconditions.percyDOMScript;
+  });
+
+  // Step 2: Capture DOM at each width (flat cy commands — no async nesting)
+  cy.then(() => {
+    /* istanbul ignore next */
+    if (_skip) return;
+
+    // Determine widths to capture
+    let widths;
+    if (isResponsive) {
+      const rawWidths = options.widths || [originalWidth];
+      /* istanbul ignore next: sdk-utils version compatibility */
+      widths = rawWidths.map(w => ({ width: w }));
+    } else {
+      widths = [{ width: null }]; // null = don't resize, capture at current viewport
+    }
+
+    const useMinHeight = isResponsive &&
+      getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+    const minHeight = useMinHeight
+      ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
+      : originalHeight;
+
+    const rawSleepTime = isResponsive
+      ? (getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME'))
+      : null;
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
 
-    // Shared preconditions + fetch responsive width/height pairs from CLI
-    cy.then({ timeout: CY_TIMEOUT }, async () => {
-      const preconditions = await checkPreconditions(log, name);
-      if (preconditions.skip) {
-        _percySkip = true;
-        return;
+    for (const { width } of widths) {
+      // Resize viewport (only for responsive mode with actual widths)
+      if (width !== null) {
+        cy.viewport(width, minHeight);
       }
-      _percyDOMScript = preconditions.percyDOMScript;
 
-      /* istanbul ignore next: sdk-utils version compatibility */
-      if (utils.getResponsiveWidths) {
-        _percyWidthHeights = await utils.getResponsiveWidths(options.widths || []);
-      } else {
-        _percyWidthHeights = (options.widths || [originalWidth]).map(w => ({ width: w, height: null }));
+      // Reload page at new viewport (responsive + reload mode only)
+      if (width !== null && needsReload) {
+        cy.reload({ log: false });
+        cy.document({ log: false }).its('readyState').should('eq', 'complete');
       }
-    });
 
-    _percySnapshots = [];
+      if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-    cy.then(() => {
-      /* istanbul ignore next -- guard: browser-side early return when Percy is disabled */
-      if (_percySkip) return;
-      /* istanbul ignore next */
-      const widthHeights = _percyWidthHeights || [];
+      // Serialize DOM and collect snapshot
+      cy.document({ log: false }).then(async doc => {
+        /* istanbul ignore next */
+        if (_skip || !_percyDOMScript) return;
 
-      const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-      const minHeight = useMinHeight ? (utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
+        injectPercyDOM(_percyDOMScript);
 
-      for (const { width, height: configHeight } of widthHeights) {
-        const w = width;
-        const h = configHeight || minHeight;
+        const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+        if (width !== null) domSnapshot.width = width;
 
-        cy.viewport(w, h);
+        await processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
+        _snapshots.push(domSnapshot);
+      });
+    }
+  });
 
-        if (needsReload) {
-          cy.reload({ log: false });
-          cy.document({ log: false }).its('readyState').should('eq', 'complete');
-        }
-
-        if (sleepMs > 0) cy.wait(sleepMs, { log: false });
-
-        cy.document({ log: false }).then(async doc => {
-          /* istanbul ignore next */
-          if (_percySkip) return;
-          /* istanbul ignore next */
-          if (!_percyDOMScript) return;
-
-          injectPercyDOM(_percyDOMScript);
-          if (window.PercyDOM && window.PercyDOM.waitForResize) window.PercyDOM.waitForResize();
-
-          const dom = window.PercyDOM.serialize({ ...options, dom: doc });
-          dom.width = w;
-          await processCrossOriginIframes(doc, dom, options, _percyDOMScript);
-          _percySnapshots.push(dom);
-        });
-      }
-    });
-
-    /* istanbul ignore next: viewport restore runs in Cypress command queue — nyc cannot instrument */
+  // Restore viewport after responsive capture
+  if (isResponsive) {
+    /* istanbul ignore next: viewport restore — nyc cannot instrument Cypress command queue */
     cy.viewport(originalWidth, originalHeight);
+  }
 
-    cy.then(() => {
-      const snapshots = [..._percySnapshots];
-      _percySnapshots = [];
-      if (!snapshots || snapshots.length === 0 || _percySkip) {
-        _resetResponsiveState();
-        return;
+  // Step 3: Post snapshot(s) with cookies, retry, and error handling
+  cy.then(() => {
+    /* istanbul ignore next */
+    if (_skip || _snapshots.length === 0) return;
+
+    cy.getCookies({ log: false }).then(cookies => {
+      if (cookies && cookies.length > 0) {
+        for (const snap of _snapshots) {
+          snap.cookies = cookies;
+        }
       }
 
       cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
-        const url = doc.URL;
-
-        /* istanbul ignore next: responsive post path — Cypress command queue callbacks */
-        return cy.getCookies({ log: false }).then(async cookies => {
-          if (cookies && cookies.length > 0) {
-            for (const snap of snapshots) {
-              if (snap && snap.dom) snap.dom.cookies = cookies;
-            }
-          }
-
-          /* istanbul ignore next: responsive post path — nyc cannot fully instrument Cypress command queue callbacks */
-          const throwConfig = Cypress.config('percyThrowErrorOnFailure');
-          const _throw = throwConfig === undefined ? false : throwConfig;
-
-          try {
-            let response = await withRetry(async () => await withLog(async () => {
-              return await utils.postSnapshot({
-                ...options,
-                environmentInfo: ENV_INFO,
-                clientInfo: CLIENT_INFO,
-                domSnapshot: snapshots,
-                url,
-                name
-              });
-            }, 'posting responsive dom snapshot', _throw));
-            cylog(name, meta);
-            /* istanbul ignore next */
-            return response;
-          } catch (err) {
-            log.error(`Failed to post responsive snapshot "${name}"`, err);
-          } finally {
-            _resetResponsiveState();
-          }
-        });
-      });
-    });
-
-    return;
-  }
-
-  return cy.then({ timeout: CY_TIMEOUT }, async () => {
-    const preconditions = await checkPreconditions(log, name);
-    if (preconditions.skip) {
-      if (preconditions.reason === 'interactive') {
-        return cylog('Disabled in interactive mode', { details: 'use "cypress run" instead of "cypress open"', name });
-      }
-      return cylog('Not running', { name });
-    }
-
-    await withLog(async () => {
-      injectPercyDOM(preconditions.percyDOMScript);
-    }, 'injecting @percy/dom');
-
-    return cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async dom => {
-      let domSnapshot = await withLog(() => {
-        return window.PercyDOM.serialize({ ...options, dom });
-      }, 'taking dom snapshot');
-
-      await withLog(async () => {
-        await processCrossOriginIframes(dom, domSnapshot, options, preconditions.percyDOMScript);
-      }, 'processing cross-origin iframes', false);
-
-      return cy.getCookies({ log: false }).then(async cookies => {
-        if (cookies && cookies.length > 0) domSnapshot.cookies = cookies;
-
+        /* istanbul ignore next */
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
         const _throw = throwConfig === undefined ? false : throwConfig;
 
-        let response = await withRetry(async () => await withLog(async () => {
-          return await utils.postSnapshot({
-            ...options,
-            environmentInfo: ENV_INFO,
-            clientInfo: CLIENT_INFO,
-            domSnapshot,
-            url: dom.URL,
-            name
-          });
-        }, 'posting dom snapshot', _throw));
+        // Post single snapshot or array depending on mode
+        const domSnapshot = isResponsive ? _snapshots : _snapshots[0];
 
-        cylog(name, meta);
-        return response;
+        try {
+          let response = await withRetry(async () => await withLog(async () => {
+            return await utils.postSnapshot({
+              ...options,
+              environmentInfo: ENV_INFO,
+              clientInfo: CLIENT_INFO,
+              domSnapshot,
+              url: doc.URL,
+              name
+            });
+          }, 'posting dom snapshot', _throw));
+
+          cylog(name, meta);
+          /* istanbul ignore next */
+          return response;
+        } catch (err) {
+          log.error(`Failed to post snapshot "${name}"`, err);
+        } finally {
+          _snapshots = [];
+        }
       });
     });
   });
