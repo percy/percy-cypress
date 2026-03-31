@@ -11,6 +11,8 @@ describe('percySnapshot', () => {
   });
 
   describe('Environment Configuration', () => {
+    // Import env-utils inside each test to avoid module-level side effects
+    const envUtils = () => require('../../env-utils');
     let originalEnv;
     let originalExpose;
 
@@ -32,76 +34,50 @@ describe('percySnapshot', () => {
       }
     });
 
-    it('uses Cypress.expose() when available', () => {
-      const utils = require('@percy/sdk-utils');
-      const testAddress = 'http://test-expose-address:5338';
+    it('getEnvValue() returns value from Cypress.expose() when available', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://test-expose:5338');
 
-      // Mock Cypress.expose
-      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(testAddress);
-
-      // Reload the module to trigger the env configuration code
       cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.equal('http://test-expose:5338');
         expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        expect(utils.percy.address).to.equal(testAddress);
       });
     });
 
-    it('does not set address when Cypress.expose() returns null/undefined', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalAddress = utils.percy.address;
-
-      // Mock Cypress.expose to return undefined
-      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
-
-      cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
-        expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // Address should remain unchanged
-        expect(utils.percy.address).to.equal(originalAddress);
-      });
-    });
-
-    it('handles allowCypressEnv: false gracefully', () => {
-      // Simulate Cypress.env() throwing when allowCypressEnv is false
-      // and Cypress.expose() returning undefined for the key
-      const origExpose = Cypress.expose;
+    it('getEnvValue() falls back to Cypress.env() when expose returns undefined', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().returns(undefined);
       const origEnv = Cypress.env;
+      Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://fallback:5338');
 
+      cy.wrap(null).then(() => {
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.equal('http://fallback:5338');
+        expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
+        Cypress.env = origEnv;
+      });
+    });
+
+    it('getEnvValue() handles Cypress.env() throwing (allowCypressEnv: false)', () => {
+      const { getEnvValue } = envUtils();
       Cypress.expose = cy.stub().returns(undefined);
       Cypress.env = cy.stub().throws(new Error('Cypress.env() does not work when allowCypressEnv is set to false'));
 
       cy.wrap(null).then(() => {
-        // getEnvValue should return undefined (not throw)
-        // Re-import would be needed to test module-level code, but we can test
-        // the same logic pattern: expose returns undefined, env throws
-        let result;
-        try {
-          const val = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (val !== undefined) {
-            result = val;
-          } else {
-            try {
-              result = Cypress.env('PERCY_SERVER_ADDRESS');
-            } catch (e) {
-              result = undefined;
-            }
-          }
-        } finally {
-          Cypress.expose = origExpose;
-          Cypress.env = origEnv;
-        }
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.be.undefined;
+      });
+    });
 
+    it('getEnvValue() returns undefined when both methods fail', () => {
+      const { getEnvValue } = envUtils();
+      // No Cypress.expose available, Cypress.env throws
+      delete Cypress.expose;
+      Cypress.env = cy.stub().throws(new Error('env unavailable'));
+
+      cy.wrap(null).then(() => {
+        const result = getEnvValue('SOME_KEY');
         expect(result).to.be.undefined;
       });
     });
@@ -110,7 +86,7 @@ describe('percySnapshot', () => {
       const utils = require('@percy/sdk-utils');
 
       // Clear address INSIDE the command queue so it's unset when percySnapshot runs.
-      // This triggers the lazy resolution block (lines 128-134).
+      // This triggers the lazy resolution block.
       cy.then(() => {
         utils.percy.address = null;
       });
@@ -119,7 +95,7 @@ describe('percySnapshot', () => {
 
       // Restore address for subsequent tests
       cy.then(() => {
-        utils.percy.address = `http://localhost:${helpers.port}`;
+        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
       });
     });
 
@@ -128,7 +104,7 @@ describe('percySnapshot', () => {
       let origCyEnv;
 
       // Clear address and break cy.env INSIDE the command queue
-      // to exercise the catch block (lines 136-138)
+      // to exercise the catch block in lazyResolveAddress
       cy.then(() => {
         origCyEnv = cy.env;
         utils.percy.address = null;
@@ -139,7 +115,56 @@ describe('percySnapshot', () => {
 
       cy.then(() => {
         cy.env = origCyEnv;
-        utils.percy.address = `http://localhost:${helpers.port}`;
+        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+      });
+    });
+
+    it('lazyResolveAddress() resolves from Cypress.env() when address is falsy', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const savedAddress = utils.percy.address;
+        // The address getter always returns a truthy default ('http://localhost:5338')
+        // via process.env.PERCY_SERVER_ADDRESS || 'http://localhost:5338'.
+        // To test the resolution path, temporarily override the getter to return null.
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { /* no-op during test */ },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://lazy:5338');
+
+        lazyResolveAddress(log);
+        // lazyResolveAddress calls Cypress.env('PERCY_SERVER_ADDRESS') when address is falsy
+        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+
+        // Restore the original address property
+        Object.defineProperty(utils.percy, 'address', descriptor);
+        utils.percy.address = savedAddress;
+      });
+    });
+
+    it('lazyResolveAddress() does nothing when address is already set', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const savedAddress = utils.percy.address;
+        utils.percy.address = 'http://already-set:5338';
+        const envStub = cy.stub();
+        Cypress.env = envStub;
+
+        lazyResolveAddress(log);
+        expect(utils.percy.address).to.equal('http://already-set:5338');
+        expect(envStub).not.to.be.called;
+
+        // Restore
+        utils.percy.address = savedAddress;
       });
     });
   });
