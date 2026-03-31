@@ -750,7 +750,10 @@ describe('percySnapshot', () => {
         widths: [1280]
       });
 
-      // Should not crash; the snapshot was attempted but failed
+      // Snapshot should not appear in logs (post failed)
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive Post Fail');
+
       // Reset mock server so subsequent tests work
       cy.then(() => helpers.test('reset'));
     });
