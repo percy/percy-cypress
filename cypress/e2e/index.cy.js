@@ -148,6 +148,54 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('lazyResolveAddress() does not set address when Cypress.env() returns undefined', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        let capturedSet = null;
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { capturedSet = v; },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
+
+        lazyResolveAddress(log);
+        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+        // addr is falsy (undefined) so address should NOT be set
+        expect(capturedSet).to.be.null;
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
+
+    it('lazyResolveAddress() catches Cypress.env() errors and logs debug', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+      const debugSpy = cy.spy(log, 'debug');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: () => {},
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().throws(new Error('env blocked'));
+
+        lazyResolveAddress(log);
+        expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
+
     it('lazyResolveAddress() does nothing when address is already set', () => {
       const { lazyResolveAddress } = envUtils();
       const utils = require('@percy/sdk-utils');

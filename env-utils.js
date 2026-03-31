@@ -7,7 +7,7 @@ const utils = require('@percy/sdk-utils');
 
 // Read environment values using Cypress.expose() (Cypress 15.10+) with Cypress.env() fallback.
 // Tries Cypress.expose() first, then Cypress.env() (wrapped in try/catch for allowCypressEnv: false).
-const getEnvValue = /* istanbul ignore next */ (key) => {
+const getEnvValue = (key) => {
   if (typeof Cypress.expose === 'function') {
     const val = Cypress.expose(key);
     if (val !== undefined) return val;
@@ -15,7 +15,6 @@ const getEnvValue = /* istanbul ignore next */ (key) => {
   try {
     return Cypress.env(key);
   } catch (e) {
-    /* istanbul ignore next: only hit when allowCypressEnv: false */
     return undefined;
   }
 };
@@ -24,7 +23,6 @@ const getEnvValue = /* istanbul ignore next */ (key) => {
 // (e.g., CYPRESS_PERCY_SERVER_ADDRESS with allowCypressEnv: false puts it in the
 // secure store, accessible only via async cy.env()), try cy.env() as last resort.
 function lazyResolveAddress(log) {
-  /* istanbul ignore next: only triggers when module-level getEnvValue() failed to find address */
   if (!utils.percy.address) {
     try {
       const addr = Cypress.env('PERCY_SERVER_ADDRESS');
