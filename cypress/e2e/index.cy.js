@@ -122,8 +122,6 @@ describe('percySnapshot', () => {
 
     it('disables snapshots and fails the test', () => {
       cy.on('fail', (_err, runnable) => {
-        // it only runs when test fails.
-        // This will supress failure and pass the test.
         return false;
       });
 
@@ -585,11 +583,9 @@ describe('percySnapshot', () => {
     });
 
     it('captures cookies in snapshots', () => {
-      // Set some test cookies before taking snapshot
       cy.setCookie('test_cookie', 'test_value');
       cy.setCookie('another_cookie', 'another_value');
 
-      // Verify cookies are set
       cy.getCookies().should('have.length', 2);
 
       cy.percySnapshot('Cookie Capture Test');
@@ -604,6 +600,327 @@ describe('percySnapshot', () => {
       cy.percySnapshot('No Cookie Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: No Cookie Test');
+    });
+  });
+
+  describe('responsiveSnapshotCapture', () => {
+    it('posts snapshot with responsiveSnapshotCapture option enabled', () => {
+      cy.percySnapshot('Responsive Capture Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Capture Test');
+    });
+
+    it('posts snapshot with responsive_snapshot_capture (snake_case) option enabled', () => {
+      cy.percySnapshot('Responsive Snake Case Test', {
+        responsive_snapshot_capture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Snake Case Test');
+    });
+
+    it('falls back to normal capture when responsiveSnapshotCapture is false', () => {
+      cy.percySnapshot('Non-Responsive Test', {
+        responsiveSnapshotCapture: false
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Non-Responsive Test');
+    });
+
+    it('disables responsive capture when deferUploads is true', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      cy.wrap(null).then(() => {
+        utils.percy.config = { percy: { deferUploads: true }, snapshot: { responsiveSnapshotCapture: true } };
+      });
+
+      cy.percySnapshot('DeferUploads Disabled Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: DeferUploads Disabled Test');
+
+      cy.wrap(null).then(() => {
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+    });
+
+    it('falls back to standard capture when deferUploads disables responsive', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      cy.wrap(null).then(() => {
+        utils.percy.config = { percy: { deferUploads: true }, snapshot: { responsiveSnapshotCapture: true } };
+      });
+
+      cy.percySnapshot('DeferUploads Fallback Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      // When deferUploads disables responsive capture, a standard snapshot is still taken
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: DeferUploads Fallback Test');
+
+      cy.wrap(null).then(() => {
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+    });
+
+    it('uses responsiveSnapshotCapture from percy config when not in options', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      cy.wrap(null).then(() => {
+        utils.percy.config = { snapshot: { responsiveSnapshotCapture: true } };
+      });
+
+      cy.percySnapshot('Config Responsive Test', {
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Config Responsive Test');
+
+      cy.wrap(null).then(() => {
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+    });
+
+    it('captures DOM at multiple widths and attaches width to each snapshot', () => {
+      cy.percySnapshot('Multi Width Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 768, 1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Multi Width Test');
+    });
+
+    it('restores original document width after responsive capture', () => {
+      cy.document().then((dom) => {
+        const originalWidth = dom.documentElement.style.width;
+
+        cy.percySnapshot('Restore Width Test', {
+          responsiveSnapshotCapture: true,
+          widths: [375, 1280]
+        });
+
+        cy.document().then((domAfter) => {
+          expect(domAfter.documentElement.style.width).to.equal(originalWidth);
+        });
+      });
+    });
+
+    it('handles responsive capture with sleep time env var', () => {
+      const originalSleepTime = Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '0');
+
+      cy.percySnapshot('Sleep Time Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Sleep Time Test');
+
+      cy.wrap(null).then(() => {
+        if (originalSleepTime !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', originalSleepTime);
+        } else {
+          // Cypress.env doesn't support delete, set to undefined
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
+        }
+      });
+    });
+
+    it('handles responsive capture with RESPONSIVE_CAPTURE_SLEEP_TIME env var', () => {
+      const originalSleepTime = Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME');
+
+      Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME', '0');
+
+      cy.percySnapshot('Alt Sleep Time Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Alt Sleep Time Test');
+
+      cy.wrap(null).then(() => {
+        if (originalSleepTime !== undefined) {
+          Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME', originalSleepTime);
+        } else {
+          Cypress.env('RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
+        }
+      });
+    });
+
+    it('handles responsive capture with min height env var enabled', () => {
+      const originalMinHeight = Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+
+      cy.percySnapshot('Min Height Env Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Min Height Env Test');
+
+      cy.wrap(null).then(() => {
+        if (originalMinHeight !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', originalMinHeight);
+        } else {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        }
+      });
+    });
+
+    it('uses reload-based capture when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is enabled', () => {
+      const originalReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+
+      cy.percySnapshot('Reload Page Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Reload Page Test');
+
+      cy.wrap(null).then(() => {
+        if (originalReload !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', originalReload);
+        } else {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        }
+      });
+    });
+
+    it('re-injects PercyDOM after each reload during responsive capture', () => {
+      const originalReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+
+      cy.percySnapshot('Reload PercyDOM Reinject Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 768]
+      });
+
+      // After the reload-based capture completes, PercyDOM should still be
+      // available on the spec runner window (not the AUT window, which resets on reload)
+      cy.wrap(null).then(() => {
+        expect(window.PercyDOM).to.not.be.undefined;
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Reload PercyDOM Reinject Test');
+
+      cy.wrap(null).then(() => {
+        if (originalReload !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', originalReload);
+        } else {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        }
+      });
+    });
+
+    it('does not use reload when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is false', () => {
+      const originalReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'false');
+
+      // Should use CSS-based capture (default), verify document width is restored
+      cy.document().then((dom) => {
+        const originalWidth = dom.documentElement.style.width;
+
+        cy.percySnapshot('No Reload Test', {
+          responsiveSnapshotCapture: true,
+          widths: [375, 1280]
+        });
+
+        cy.document().then((domAfter) => {
+          expect(domAfter.documentElement.style.width).to.equal(originalWidth);
+        });
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Reload Test');
+
+      cy.wrap(null).then(() => {
+        if (originalReload !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', originalReload);
+        } else {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        }
+      });
+    });
+
+    it('captures cookies after reload-based responsive capture', () => {
+      const originalReload = Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE');
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+      cy.setCookie('reload_test_cookie', 'reload_value');
+
+      cy.percySnapshot('Reload Cookie Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Reload Cookie Test');
+
+      cy.wrap(null).then(() => {
+        if (originalReload !== undefined) {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', originalReload);
+        } else {
+          Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        }
+      });
+    });
+
+    it('returns domSnapshot as array when responsive capture is enabled', () => {
+      cy.percySnapshot('Array Snapshot Test', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Array Snapshot Test');
+    });
+
+    it('works with no widths specified when responsive capture is enabled', () => {
+      cy.percySnapshot('No Widths Test', {
+        responsiveSnapshotCapture: true
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Widths Test');
     });
   });
 });
