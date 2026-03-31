@@ -25,13 +25,8 @@ const getEnvValue = (key) => {
 function lazyResolveAddress(log) {
   if (!utils.percy.address) {
     try {
-      if (typeof cy.env === 'function') {
-        cy.env(['PERCY_SERVER_ADDRESS']).then((result) => {
-          if (result && result.PERCY_SERVER_ADDRESS) {
-            utils.percy.address = result.PERCY_SERVER_ADDRESS;
-          }
-        });
-      }
+      const addr = Cypress.env('PERCY_SERVER_ADDRESS');
+      if (addr) utils.percy.address = addr;
     } catch (e) {
       log.debug('Could not resolve Percy CLI address from environment variables', e);
     }

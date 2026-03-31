@@ -19,6 +19,7 @@
   "files": [
     "index.js",
     "createRegion.js",
+    "env-utils.js",
     "types/index.d.ts"
   ],
   "scripts": {

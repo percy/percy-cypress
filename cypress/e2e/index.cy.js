@@ -501,7 +501,8 @@ describe('percySnapshot', () => {
           widths: [1280]
         });
 
-        // Should not post a snapshot (cleanup path is hit)
+        cy.then(() => helpers.get('logs'))
+          .should('not.include', 'Snapshot found: Responsive Interactive Skip');
       });
     });
 
@@ -518,6 +519,9 @@ describe('percySnapshot', () => {
         responsiveSnapshotCapture: true,
         widths: [1280]
       });
+
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive Percy Disabled');
 
       // Reset mock server and percy state so subsequent tests work
       cy.then(async () => {

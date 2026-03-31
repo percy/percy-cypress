@@ -180,14 +180,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     cy.task('percy:clearSnapshots', null, { log: false });
     cy.url({ log: false }).then(url => { _percyBaseUrl = url; });
 
-    const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const minHeight = useMinHeight ? (utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
-
     cy.then(() => {
       /* istanbul ignore next -- guard: browser-side early return when Percy is disabled */
       if (_percySkip) return;
       /* istanbul ignore next */
       const widthHeights = _percyWidthHeights || [];
+
+      const useMinHeight = getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+      const minHeight = useMinHeight ? (utils.percy?.config?.snapshot?.minHeight || originalHeight) : originalHeight;
 
       for (const { width, height: configHeight } of widthHeights) {
         const w = width;
@@ -236,21 +236,37 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
 
       cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
-        try {
-          await utils.postSnapshot({
-            ...options,
-            environmentInfo: ENV_INFO,
-            clientInfo: CLIENT_INFO,
-            domSnapshot: snapshots,
-            url: doc.URL,
-            name
-          });
-          cylog(name, meta);
-        } catch (err) {
-          log.error(`Failed to post responsive snapshot "${name}"`, err);
-        }
+        const url = doc.URL;
 
-        _resetResponsiveState();
+        return cy.getCookies({ log: false }).then(async cookies => {
+          if (cookies && cookies.length > 0) {
+            for (const snap of snapshots) {
+              if (snap && snap.dom) snap.dom.cookies = cookies;
+            }
+          }
+
+          const throwConfig = Cypress.config('percyThrowErrorOnFailure');
+          const _throw = throwConfig === undefined ? false : throwConfig;
+
+          try {
+            let response = await withRetry(async () => await withLog(async () => {
+              return await utils.postSnapshot({
+                ...options,
+                environmentInfo: ENV_INFO,
+                clientInfo: CLIENT_INFO,
+                domSnapshot: snapshots,
+                url,
+                name
+              });
+            }, 'posting responsive dom snapshot', _throw));
+            cylog(name, meta);
+            return response;
+          } catch (err) {
+            log.error(`Failed to post responsive snapshot "${name}"`, err);
+          } finally {
+            _resetResponsiveState();
+          }
+        });
       });
     });
 
