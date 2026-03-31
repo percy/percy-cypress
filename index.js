@@ -132,7 +132,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
   const meta = { snapshot: { name, testCase: options.testCase } };
 
-  const withLog = async (func, context, _throw = true) => {
+  const withLog = async (func, context, _throw) => {
     try {
       return await func();
     } catch (error) {
@@ -266,7 +266,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       }
 
       cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
-        /* istanbul ignore next */
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
         const _throw = throwConfig === undefined ? false : throwConfig;
 
