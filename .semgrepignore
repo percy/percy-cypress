@@ -8,4 +8,4 @@ cypress/fixtures/
 dist/
 
 # Local-only test fixture server (not production code)
-serve-fixtures.js
+cypress/support/serve-fixtures.js
