@@ -38,7 +38,8 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
     for (const iframe of iframes) {
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
-      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => src === p || src.startsWith(p))) continue;
+      const srcLower = src ? src.toLowerCase() : '';
+      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
 
       try {
         const frameUrl = new URL(src, currentUrl.href);
@@ -85,7 +86,11 @@ async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScri
 }
 
 function isResponsiveDOMCaptureValid(options) {
-  if (utils.percy?.config?.percy?.deferUploads) return false;
+  if (utils.percy?.config?.percy?.deferUploads) {
+    const log = utils.logger('cypress');
+    log.warn('Responsive capture disabled: deferUploads is enabled');
+    return false;
+  }
   return (
     options?.responsive_snapshot_capture ||
     options?.responsiveSnapshotCapture ||
@@ -221,7 +226,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-        cy.document({ log: false }).then(doc => {
+        cy.document({ log: false }).then(async doc => {
           /* istanbul ignore next */
           if (_percySkip) return;
           /* istanbul ignore next */
@@ -232,13 +237,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
           const dom = window.PercyDOM.serialize({ ...options, dom: doc });
           dom.width = w;
+          await processCrossOriginIframes(doc, dom, options, _percyDOMScript);
           _percySnapshots.push(dom);
         });
       }
-
-      /* istanbul ignore next: viewport restore runs in Cypress command queue — nyc cannot instrument */
-      cy.viewport(originalWidth, originalHeight);
     });
+
+    /* istanbul ignore next: viewport restore runs in Cypress command queue — nyc cannot instrument */
+    cy.viewport(originalWidth, originalHeight);
 
     cy.then(() => {
       const snapshots = [..._percySnapshots];
