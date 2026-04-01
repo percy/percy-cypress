@@ -28,7 +28,7 @@ const SKIP_IFRAME_SRCS = [
   'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
 
-async function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
+function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
   try {
     const currentUrl = new URL(dom.URL);
@@ -161,7 +161,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  const isResponsive = isResponsiveDOMCaptureValid(options);
   const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
@@ -170,6 +169,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let _percyDOMScript = null;
   let _widthHeights = null;
   let _snapshots = [];
+  let _isResponsive = false;
 
   // Step 1: Preconditions (async — runs in cy.then)
   cy.then({ timeout: CY_TIMEOUT }, async () => {
@@ -185,8 +185,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
     _percyDOMScript = preconditions.percyDOMScript;
 
+    // Check responsive AFTER isPercyEnabled() populates utils.percy.config
+    _isResponsive = isResponsiveDOMCaptureValid(options);
+
     try {
-      if (isResponsive) {
+      if (_isResponsive) {
         _widthHeights = await utils.getResponsiveWidths(options.widths || []);
       }
     } catch (e) {
@@ -200,19 +203,19 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     // Use CLI-provided width/height pairs when available, fallback to raw widths
     let widthHeights;
-    if (isResponsive) {
+    if (_isResponsive) {
       widthHeights = _widthHeights || (options.widths || [originalWidth]).map(w => ({ width: w }));
     } else {
       widthHeights = [{ width: null }]; // null = don't resize, capture at current viewport
     }
 
-    const useMinHeight = isResponsive &&
+    const useMinHeight = _isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
     const defaultHeight = useMinHeight
       ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
       : originalHeight;
 
-    const rawSleepTime = isResponsive
+    const rawSleepTime = _isResponsive
       ? (getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME'))
       : null;
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
@@ -247,16 +250,18 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
-        await processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
+        processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
         _snapshots.push(domSnapshot);
       });
     }
   });
 
   // Restore viewport after responsive capture
-  if (isResponsive) {
-    cy.viewport(originalWidth, originalHeight);
-  }
+  cy.then(() => {
+    if (_isResponsive) {
+      cy.viewport(originalWidth, originalHeight);
+    }
+  });
 
   // Step 3: Post snapshot(s) with cookies, retry, and error handling
   cy.then(() => {
@@ -274,7 +279,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const _throw = throwConfig === undefined ? false : throwConfig;
 
         // Post single snapshot or array depending on mode
-        const domSnapshot = isResponsive ? _snapshots : _snapshots[0];
+        const domSnapshot = _isResponsive ? _snapshots : _snapshots[0];
 
         try {
           let response = await withRetry(async () => await withLog(async () => {
