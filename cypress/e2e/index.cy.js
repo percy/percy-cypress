@@ -11,6 +11,8 @@ describe('percySnapshot', () => {
   });
 
   describe('Environment Configuration', () => {
+    // Import env-utils inside each test to avoid module-level side effects
+    const envUtils = () => require('../../env-utils');
     let originalEnv;
     let originalExpose;
 
@@ -32,43 +34,185 @@ describe('percySnapshot', () => {
       }
     });
 
-    it('uses Cypress.expose() when available', () => {
-      const utils = require('@percy/sdk-utils');
-      const testAddress = 'http://test-expose-address:5338';
+    it('getEnvValue() returns value from Cypress.expose() when available', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://test-expose:5338');
 
-      // Mock Cypress.expose
-      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(testAddress);
-
-      // Reload the module to trigger the env configuration code
       cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.equal('http://test-expose:5338');
         expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        expect(utils.percy.address).to.equal(testAddress);
       });
     });
 
-    it('does not set address when Cypress.expose() returns null/undefined', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalAddress = utils.percy.address;
-
-      // Mock Cypress.expose to return undefined
-      Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
+    it('getEnvValue() falls back to Cypress.env() when expose returns undefined', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().returns(undefined);
+      const origEnv = Cypress.env;
+      Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://fallback:5338');
 
       cy.wrap(null).then(() => {
-        // Simulate the configuration logic
-        if (typeof Cypress.expose === 'function') {
-          const addr = Cypress.expose('PERCY_SERVER_ADDRESS');
-          if (addr) utils.percy.address = addr;
-        }
-
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.equal('http://fallback:5338');
         expect(Cypress.expose).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // Address should remain unchanged
-        expect(utils.percy.address).to.equal(originalAddress);
+        Cypress.env = origEnv;
+      });
+    });
+
+    it('getEnvValue() handles Cypress.env() throwing (allowCypressEnv: false)', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().returns(undefined);
+      Cypress.env = cy.stub().throws(new Error('Cypress.env() does not work when allowCypressEnv is set to false'));
+
+      cy.wrap(null).then(() => {
+        const result = getEnvValue('PERCY_SERVER_ADDRESS');
+        expect(result).to.be.undefined;
+      });
+    });
+
+    it('getEnvValue() returns undefined when both methods fail', () => {
+      const { getEnvValue } = envUtils();
+      // No Cypress.expose available, Cypress.env throws
+      delete Cypress.expose;
+      Cypress.env = cy.stub().throws(new Error('env unavailable'));
+
+      cy.wrap(null).then(() => {
+        const result = getEnvValue('SOME_KEY');
+        expect(result).to.be.undefined;
+      });
+    });
+
+    it('lazy-resolves address via cy.env() when utils.percy.address is unset', () => {
+      const utils = require('@percy/sdk-utils');
+
+      // Clear address INSIDE the command queue so it's unset when percySnapshot runs.
+      // This triggers the lazy resolution block.
+      cy.then(() => {
+        utils.percy.address = null;
+      });
+
+      cy.percySnapshot('lazy-resolve-test');
+
+      // Restore address for subsequent tests
+      cy.then(() => {
+        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+      });
+    });
+
+    it('handles cy.env() failure during lazy address resolution gracefully', () => {
+      const utils = require('@percy/sdk-utils');
+      let origCyEnv;
+
+      // Clear address and break cy.env INSIDE the command queue
+      // to exercise the catch block in lazyResolveAddress
+      cy.then(() => {
+        origCyEnv = cy.env;
+        utils.percy.address = null;
+        cy.env = function() { throw new Error('cy.env not available'); };
+      });
+
+      cy.percySnapshot('lazy-resolve-error-test');
+
+      cy.then(() => {
+        cy.env = origCyEnv;
+        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+      });
+    });
+
+    it('lazyResolveAddress() resolves from Cypress.env() when address is falsy', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const savedAddress = utils.percy.address;
+        // The address getter always returns a truthy default ('http://localhost:5338')
+        // via process.env.PERCY_SERVER_ADDRESS || 'http://localhost:5338'.
+        // To test the resolution path, temporarily override the getter to return null.
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { /* no-op during test */ },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://lazy:5338');
+
+        lazyResolveAddress(log);
+        // lazyResolveAddress calls Cypress.env('PERCY_SERVER_ADDRESS') when address is falsy
+        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+
+        // Restore the original address property
+        Object.defineProperty(utils.percy, 'address', descriptor);
+        utils.percy.address = savedAddress;
+      });
+    });
+
+    it('lazyResolveAddress() does not set address when Cypress.env() returns undefined', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        let capturedSet = null;
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { capturedSet = v; },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
+
+        lazyResolveAddress(log);
+        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+        // addr is falsy (undefined) so address should NOT be set
+        expect(capturedSet).to.be.null;
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
+
+    it('lazyResolveAddress() catches Cypress.env() errors and logs debug', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+      const debugSpy = cy.spy(log, 'debug');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: () => {},
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().throws(new Error('env blocked'));
+
+        lazyResolveAddress(log);
+        expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
+
+    it('lazyResolveAddress() does nothing when address is already set', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const savedAddress = utils.percy.address;
+        utils.percy.address = 'http://already-set:5338';
+        const envStub = cy.stub();
+        Cypress.env = envStub;
+
+        lazyResolveAddress(log);
+        expect(utils.percy.address).to.equal('http://already-set:5338');
+        expect(envStub).not.to.be.called;
+
+        // Restore
+        utils.percy.address = savedAddress;
       });
     });
   });
@@ -336,6 +480,668 @@ describe('percySnapshot', () => {
     const region = createRegion({ algorithm: 'standard', adsEnabled: true });
     expect(region).to.have.property('configuration');
     expect(region.configuration).to.have.property('adsEnabled', true);
+  });
+
+  describe('Responsive Snapshot Capture', () => {
+    it('supports responsiveSnapshotCapture option', () => {
+      cy.percySnapshot('Responsive Capture Test', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Capture Test');
+    });
+
+    it('supports responsive_snapshot_capture snake_case option', () => {
+      cy.percySnapshot('Responsive Snake Case Test', {
+        responsive_snapshot_capture: true,
+        widths: [1024, 768]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Snake Case Test');
+    });
+
+    it('falls back to normal capture when responsiveSnapshotCapture is false', () => {
+      cy.percySnapshot('Non-Responsive Test', {
+        responsiveSnapshotCapture: false
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Non-Responsive Test');
+    });
+
+    it('captures responsive snapshots with default widths when none specified', () => {
+      cy.percySnapshot('Responsive Default Widths', {
+        responsiveSnapshotCapture: true
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Default Widths');
+    });
+
+    it('captures responsive snapshots with minHeight option', () => {
+      cy.percySnapshot('Responsive With MinHeight', {
+        responsiveSnapshotCapture: true,
+        widths: [1280, 375],
+        minHeight: 2000
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive With MinHeight');
+    });
+
+    it('falls back to normal capture when deferUploads is enabled', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      cy.then(() => {
+        utils.percy = utils.percy || {};
+        utils.percy.config = { percy: { deferUploads: true }, snapshot: {} };
+      });
+
+      cy.percySnapshot('DeferUploads Test', { responsiveSnapshotCapture: true });
+
+      cy.then(() => {
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: DeferUploads Test');
+    });
+
+    describe('in interactive mode', () => {
+      let ogInteractive;
+
+      beforeEach(() => {
+        ogInteractive = Cypress.config('isInteractive');
+      });
+
+      afterEach(() => {
+        Cypress.config().isInteractive = ogInteractive;
+      });
+
+      it('skips responsive snapshots in interactive mode', () => {
+        Cypress.config().isInteractive = true;
+
+        cy.percySnapshot('Responsive Interactive Skip', {
+          responsiveSnapshotCapture: true,
+          widths: [1280]
+        });
+
+        cy.then(() => helpers.get('logs'))
+          .should('not.include', 'Snapshot found: Responsive Interactive Skip');
+      });
+    });
+
+    it('skips responsive capture when percy is not enabled', () => {
+      const utils = require('@percy/sdk-utils');
+
+      // Reset percy enabled state and set healthcheck to error
+      cy.then(async () => {
+        delete utils.percy.enabled;
+        await helpers.test('error', '/percy/healthcheck');
+      });
+
+      cy.percySnapshot('Responsive Percy Disabled', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive Percy Disabled');
+
+      // Reset mock server and percy state so subsequent tests work
+      cy.then(async () => {
+        await helpers.test('reset');
+        delete utils.percy.enabled;
+      });
+    });
+
+    it('skips DOM serialization when percyDOMScript is unavailable', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalFetch = utils.fetchPercyDOM;
+
+      // Make fetchPercyDOM return null to exercise the _percyDOMScript guard
+      cy.then(() => {
+        utils.fetchPercyDOM = async () => null;
+      });
+
+      cy.percySnapshot('Responsive No DOM Script', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive No DOM Script');
+
+      // Restore
+      cy.then(() => {
+        utils.fetchPercyDOM = originalFetch;
+      });
+    });
+
+    it('uses getResponsiveWidths when available for width/height pairs', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalGetResponsiveWidths = utils.getResponsiveWidths;
+
+      cy.then(() => {
+        // Stub getResponsiveWidths to return width/height pairs
+        utils.getResponsiveWidths = async (widths) => {
+          return widths.map(w => ({ width: w, height: 900 }));
+        };
+      });
+
+      cy.percySnapshot('Responsive With CLI Heights', {
+        responsiveSnapshotCapture: true,
+        widths: [1024, 768]
+      });
+
+      cy.then(() => {
+        if (originalGetResponsiveWidths) {
+          utils.getResponsiveWidths = originalGetResponsiveWidths;
+        } else {
+          delete utils.getResponsiveWidths;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive With CLI Heights');
+    });
+
+    it('uses fallback widths when getResponsiveWidths is not available', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalGetResponsiveWidths = utils.getResponsiveWidths;
+
+      cy.then(() => {
+        delete utils.getResponsiveWidths;
+      });
+
+      cy.percySnapshot('Responsive Fallback Widths', {
+        responsiveSnapshotCapture: true,
+        widths: [800, 400]
+      });
+
+      cy.then(() => {
+        if (originalGetResponsiveWidths) {
+          utils.getResponsiveWidths = originalGetResponsiveWidths;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Fallback Widths');
+    });
+
+    it('uses viewport width as fallback when no widths specified and getResponsiveWidths unavailable', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalGetResponsiveWidths = utils.getResponsiveWidths;
+
+      cy.then(() => {
+        delete utils.getResponsiveWidths;
+      });
+
+      // No widths specified -- should fall back to [originalWidth]
+      cy.percySnapshot('Responsive No Widths Fallback', {
+        responsiveSnapshotCapture: true
+      });
+
+      cy.then(() => {
+        utils.getResponsiveWidths = originalGetResponsiveWidths;
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive No Widths Fallback');
+    });
+
+    it('reloads page when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is set', () => {
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+
+      // Delete PercyDOM to force re-injection path (line 203-205)
+      const savedPercyDOM = window.PercyDOM;
+      cy.then(() => { delete window.PercyDOM; });
+
+      cy.percySnapshot('Responsive Reload Test', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => {
+        Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        // PercyDOM should have been re-injected by the code
+        if (!window.PercyDOM && savedPercyDOM) {
+          window.PercyDOM = savedPercyDOM;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Reload Test');
+    });
+
+    it('uses minHeight from env var PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', () => {
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+
+      cy.percySnapshot('Responsive MinHeight Env', {
+        responsiveSnapshotCapture: true,
+        widths: [1280],
+        minHeight: 900
+      });
+
+      cy.then(() => {
+        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive MinHeight Env');
+    });
+
+    it('uses config snapshot minHeight when option not provided', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+
+      cy.then(() => {
+        utils.percy = utils.percy || {};
+        utils.percy.config = utils.percy.config || {};
+        utils.percy.config.snapshot = utils.percy.config.snapshot || {};
+        utils.percy.config.snapshot.minHeight = 800;
+      });
+
+      cy.percySnapshot('Responsive Config MinHeight', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+        // No minHeight option -- falls through to config
+      });
+
+      cy.then(() => {
+        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Config MinHeight');
+    });
+
+    it('uses originalHeight as minHeight fallback', () => {
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+
+      // Ensure no minHeight in config
+      cy.then(() => {
+        utils.percy = utils.percy || {};
+        utils.percy.config = utils.percy.config || {};
+        utils.percy.config.snapshot = {};
+      });
+
+      cy.percySnapshot('Responsive Height Fallback', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+        // No minHeight option, no config minHeight -- falls through to originalHeight
+      });
+
+      cy.then(() => {
+        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        if (originalConfig) {
+          utils.percy.config = originalConfig;
+        } else {
+          delete utils.percy.config;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Height Fallback');
+    });
+
+    it('waits when PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME is set', () => {
+      Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '1');
+
+      cy.percySnapshot('Responsive Sleep Test', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => {
+        Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Sleep Test');
+    });
+
+    it('handles responsive capture when waitForResize is not available', () => {
+      // Delete waitForResize to cover the false branch at line 207
+      const savedWaitForResize = window.PercyDOM?.waitForResize;
+      cy.then(() => {
+        if (window.PercyDOM) {
+          delete window.PercyDOM.waitForResize;
+        }
+      });
+
+      cy.percySnapshot('Responsive No WaitForResize', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      cy.then(() => {
+        if (window.PercyDOM && savedWaitForResize) {
+          window.PercyDOM.waitForResize = savedWaitForResize;
+        }
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive No WaitForResize');
+    });
+
+    it('handles responsive snapshot post failure gracefully', () => {
+      cy.then(() => helpers.test('error', '/percy/snapshot'));
+
+      cy.percySnapshot('Responsive Post Fail', {
+        responsiveSnapshotCapture: true,
+        widths: [1280]
+      });
+
+      // Snapshot should not appear in logs (post failed)
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: Responsive Post Fail');
+
+      // Reset mock server so subsequent tests work
+      cy.then(() => helpers.test('reset'));
+    });
+  });
+
+  describe('Cross-Origin Iframe Processing', () => {
+    it('processes cross-origin iframes in snapshots', () => {
+      cy.percySnapshot('Cross-Origin Iframe Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Cross-Origin Iframe Test');
+    });
+
+    it('handles pages with no iframes gracefully', () => {
+      cy.percySnapshot('No Iframe Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Iframe Test');
+    });
+
+    it('processes a cross-origin iframe with data-percy-element-id', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.src = 'https://example.com/frame';
+        iframe.setAttribute('data-percy-element-id', 'test-iframe-1');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe With Percy ID');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe With Percy ID');
+    });
+
+    it('skips iframes with no src attribute', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('data-percy-element-id', 'no-src-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe No Src');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe No Src');
+    });
+
+    it('skips iframes with srcdoc attribute', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.src = 'https://cross-origin.example.com/page';
+        iframe.setAttribute('srcdoc', '<p>Hello</p>');
+        iframe.setAttribute('data-percy-element-id', 'srcdoc-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Srcdoc');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Srcdoc');
+    });
+
+    it('skips iframes with about:blank src', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.src = 'about:blank';
+        iframe.setAttribute('data-percy-element-id', 'blank-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe About Blank');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe About Blank');
+    });
+
+    it('skips same-origin iframes', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        // Use same origin as the test page
+        iframe.src = doc.location.origin + '/some-page';
+        iframe.setAttribute('data-percy-element-id', 'same-origin-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Same Origin');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Same Origin');
+    });
+
+    it('skips cross-origin iframes without data-percy-element-id', () => {
+      // PercyDOM.serialize() adds data-percy-element-id to all elements.
+      // To test the !percyElementId branch in processCrossOriginIframes,
+      // we override getAttribute on the iframe to return null for percy-element-id.
+      // processCrossOriginIframes runs AFTER serialize, so this override applies.
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://no-percy-id.example.com/frame');
+        doc.body.appendChild(iframe);
+
+        // Override getAttribute to return null for data-percy-element-id
+        const origGetAttr = iframe.getAttribute.bind(iframe);
+        iframe.getAttribute = function(name) {
+          if (name === 'data-percy-element-id') return null;
+          return origGetAttr(name);
+        };
+      });
+
+      cy.percySnapshot('Iframe No Percy ID');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe No Percy ID');
+    });
+
+    it('handles multiple iframes with mixed conditions', () => {
+      cy.document().then(doc => {
+        // Cross-origin iframe with percy ID (will be processed)
+        const iframe1 = doc.createElement('iframe');
+        iframe1.src = 'https://external.example.com/frame1';
+        iframe1.setAttribute('data-percy-element-id', 'mixed-iframe-1');
+        doc.body.appendChild(iframe1);
+
+        // Iframe with javascript: src (should be skipped via SKIP_IFRAME_SRCS)
+        const iframe2 = doc.createElement('iframe');
+        iframe2.src = 'javascript:void(0)';
+        iframe2.setAttribute('data-percy-element-id', 'mixed-iframe-2');
+        doc.body.appendChild(iframe2);
+
+        // Iframe with data: src (should be skipped)
+        const iframe3 = doc.createElement('iframe');
+        iframe3.src = 'data:text/html,<p>hello</p>';
+        iframe3.setAttribute('data-percy-element-id', 'mixed-iframe-3');
+        doc.body.appendChild(iframe3);
+      });
+
+      cy.percySnapshot('Mixed Iframes Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Mixed Iframes Test');
+    });
+
+    it('handles cross-origin iframe where content access throws', () => {
+      // Add a cross-origin iframe with sandbox to ensure cross-origin restriction.
+      // The browser blocks contentWindow access, exercising the catch(accessError) block.
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://cross-origin-throws.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'throws-iframe');
+        iframe.setAttribute('sandbox', '');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Throws Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Throws Test');
+    });
+
+    it('handles error in cross-origin iframe processing', () => {
+      // Override querySelectorAll to throw, triggering the outer catch block
+      cy.document().then(doc => {
+        const origQSA = doc.querySelectorAll.bind(doc);
+        let callCount = 0;
+        doc.querySelectorAll = function(selector) {
+          // Only throw for the 'iframe' selector used in processCrossOriginIframes
+          // Allow other querySelectorAll calls (used by PercyDOM.serialize) to work
+          if (selector === 'iframe') {
+            callCount++;
+            // The 2nd call is from processCrossOriginIframes (1st is from serialize)
+            if (callCount >= 2) {
+              doc.querySelectorAll = origQSA; // restore immediately
+              throw new Error('Test: querySelectorAll failure');
+            }
+          }
+          return origQSA(selector);
+        };
+      });
+
+      cy.percySnapshot('Iframe Processing Error');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Processing Error');
+    });
+
+    it('handles iframe with null contentDocument', () => {
+      // Create a cross-origin iframe and override contentDocument to return null
+      // This covers the branch where frameDocument is null (branch 7[1])
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://null-doc.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'null-doc-iframe');
+        doc.body.appendChild(iframe);
+
+        // Override contentDocument to null and contentWindow.document to null
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { return null; },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { return { document: null, PercyDOM: null }; },
+          configurable: true
+        });
+      });
+
+      cy.percySnapshot('Iframe Null Doc');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Null Doc');
+    });
+
+    it('handles iframe where PercyDOM already exists on contentWindow', () => {
+      // Create a cross-origin iframe with PercyDOM pre-loaded
+      // This covers branch 8[1] (PercyDOM exists) and 9[0] (serialize works)
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://preloaded.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'preloaded-iframe');
+        doc.body.appendChild(iframe);
+
+        // Get the real contentWindow and inject PercyDOM into it
+        const realWindow = iframe.contentWindow;
+        if (realWindow) {
+          realWindow.PercyDOM = {
+            serialize: function() { return { html: '<html></html>' }; }
+          };
+        }
+      });
+
+      cy.percySnapshot('Iframe PercyDOM Preloaded');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe PercyDOM Preloaded');
+    });
+
+    it('handles iframe where PercyDOM injection fails silently', () => {
+      // Create a cross-origin iframe where script injection doesn't create PercyDOM
+      // This covers branch 9[1] (PercyDOM still doesn't exist after injection)
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://no-inject.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'no-inject-iframe');
+        doc.body.appendChild(iframe);
+
+        // Create a fake contentWindow where PercyDOM doesn't exist
+        // and script injection doesn't add it
+        const fakeDoc = {
+          createElement: () => ({ textContent: '' }),
+          head: {
+            appendChild: () => {},
+            removeChild: () => {}
+          }
+        };
+        const fakeWindow = {
+          PercyDOM: null,
+          document: fakeDoc
+        };
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { return fakeDoc; },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { return fakeWindow; },
+          configurable: true
+        });
+      });
+
+      cy.percySnapshot('Iframe No Inject');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe No Inject');
+    });
+
+    it('handles iframe with invalid URL that causes parsing error', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        // //[invalid causes new URL() to throw "Invalid URL"
+        iframe.setAttribute('src', '//[invalid');
+        iframe.setAttribute('data-percy-element-id', 'invalid-url-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Invalid URL');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Invalid URL');
+    });
   });
 
   describe('New Feature Tests', () => {
