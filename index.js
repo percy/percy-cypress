@@ -7,6 +7,38 @@ const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
+// Inject Percy preflight script before every page load to intercept
+// closed shadow roots and ElementInternals. This runs before the page's
+// own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
+Cypress.on('window:before:load', (win) => {
+  if (win.__percyPreflightActive) return;
+  win.__percyPreflightActive = true;
+
+  // Intercept closed shadow roots
+  let closedShadowRoots = new WeakMap();
+  let origAttachShadow = win.Element.prototype.attachShadow;
+  win.Element.prototype.attachShadow = function(init) {
+    let root = origAttachShadow.call(this, init);
+    if (init && init.mode === 'closed') {
+      closedShadowRoots.set(this, root);
+    }
+    return root;
+  };
+  win.__percyClosedShadowRoots = closedShadowRoots;
+
+  // Intercept ElementInternals for :state() capture
+  if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
+    let internalsMap = new WeakMap();
+    let origAttachInternals = win.HTMLElement.prototype.attachInternals;
+    win.HTMLElement.prototype.attachInternals = function() {
+      let internals = origAttachInternals.call(this);
+      internalsMap.set(this, internals);
+      return internals;
+    };
+    win.__percyInternals = internalsMap;
+  }
+});
+
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
 utils.request.fetch = async function fetch(url, options) {
@@ -246,6 +278,17 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         if (_skip || !_percyDOMScript) return;
 
         injectPercyDOM(_percyDOMScript);
+
+        // Bridge preflight data from the app's window (AUT iframe) to the runner's
+        // window where PercyDOM.serialize() executes. The preflight hook injects
+        // these WeakMaps on the app's window, but PercyDOM reads from `window.*`.
+        let appWin = doc.defaultView;
+        if (appWin?.__percyClosedShadowRoots) {
+          window.__percyClosedShadowRoots = appWin.__percyClosedShadowRoots;
+        }
+        if (appWin?.__percyInternals) {
+          window.__percyInternals = appWin.__percyInternals;
+        }
 
         const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
