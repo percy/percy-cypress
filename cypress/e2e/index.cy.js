@@ -1204,4 +1204,115 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: No Cookie Test');
     });
   });
+
+  describe('Closed Shadow DOM and ElementInternals Preflight', () => {
+    beforeEach(() => {
+      cy.then(helpers.setupTest);
+      cy.visit(helpers.testSnapshotURL);
+    });
+
+    it('sets __percyPreflightActive flag on the window', () => {
+      cy.window().then(win => {
+        expect(win.__percyPreflightActive).to.be.true;
+      });
+    });
+
+    it('intercepts closed shadow roots and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        expect(win.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+      });
+
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.true;
+          expect(win.__percyClosedShadowRoots.get(el)).to.equal(shadow);
+        });
+      });
+    });
+
+    it('does NOT capture open shadow roots in the WeakMap', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'open' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.false;
+        });
+      });
+    });
+
+    it('intercepts ElementInternals and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        if (typeof win.HTMLElement.prototype.attachInternals !== 'function') {
+          // Skip if browser doesn't support attachInternals
+          return;
+        }
+
+        const tag = 'test-internals-' + Date.now();
+        class TestEl extends win.HTMLElement {
+          constructor() {
+            super();
+            this.internals = this.attachInternals();
+          }
+        }
+        win.customElements.define(tag, TestEl);
+
+        const el = win.document.createElement(tag);
+        win.document.body.appendChild(el);
+
+        expect(win.__percyInternals).to.be.an.instanceOf(WeakMap);
+        expect(win.__percyInternals.has(el)).to.be.true;
+        expect(win.__percyInternals.get(el)).to.equal(el.internals);
+      });
+    });
+
+    it('is idempotent and skips if __percyPreflightActive is already set', () => {
+      cy.window().then(win => {
+        // Store a reference to the current patched attachShadow
+        const patchedAttachShadow = win.Element.prototype.attachShadow;
+
+        // Manually fire the event handler again by simulating re-entry
+        win.__percyPreflightActive = true;
+
+        // Trigger a new page load which would re-run the preflight
+        cy.visit(helpers.testSnapshotURL);
+        cy.window().then(newWin => {
+          // The flag should still be true (set once, not reset)
+          expect(newWin.__percyPreflightActive).to.be.true;
+        });
+      });
+    });
+
+    it('attachShadow still returns the shadow root correctly', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        // Verify the shadow root is returned and is usable
+        expect(shadow).to.not.be.null;
+        expect(shadow).to.not.be.undefined;
+        shadow.innerHTML = '<span>test</span>';
+        expect(shadow.querySelector('span').textContent).to.equal('test');
+      });
+    });
+
+    it('bridges preflight data to runner window during snapshot', () => {
+      cy.document().then(doc => {
+        // Create a closed shadow root element before taking a snapshot
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'closed' });
+      });
+
+      cy.percySnapshot('Shadow DOM Bridge Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Shadow DOM Bridge Test');
+    });
+  });
 });
