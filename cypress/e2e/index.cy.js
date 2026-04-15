@@ -1255,6 +1255,8 @@ describe('percySnapshot', () => {
 
         const tag = 'test-internals-' + Date.now();
         class TestEl extends win.HTMLElement {
+          static get formAssociated() { return true; }
+
           constructor() {
             super();
             this.internals = this.attachInternals();
@@ -1267,7 +1269,8 @@ describe('percySnapshot', () => {
 
         expect(win.__percyInternals).to.be.an.instanceOf(WeakMap);
         expect(win.__percyInternals.has(el)).to.be.true;
-        expect(win.__percyInternals.get(el)).to.equal(el.internals);
+        // Avoid deep-inspecting ElementInternals (Chai triggers NotSupportedError on .form)
+        expect(win.__percyInternals.get(el) === el.internals).to.be.true;
       });
     });
 
