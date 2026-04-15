@@ -1276,14 +1276,17 @@ describe('percySnapshot', () => {
 
     it('is idempotent and skips if __percyPreflightActive is already set', () => {
       cy.window().then(win => {
-        win.__percyPreflightActive = true;
+        // Preflight has already run (flag is true from page load)
+        expect(win.__percyPreflightActive).to.be.true;
 
-        // Trigger a new page load which would re-run the preflight
-        cy.visit(helpers.testSnapshotURL);
-        cy.window().then(newWin => {
-          // The flag should still be true (set once, not reset)
-          expect(newWin.__percyPreflightActive).to.be.true;
-        });
+        // Store reference to the already-patched attachShadow
+        const patchedFn = win.Element.prototype.attachShadow;
+
+        // Re-emit the event on the same window to trigger the idempotency guard (line 14)
+        Cypress.emit('window:before:load', win);
+
+        // attachShadow should NOT have been re-patched
+        expect(win.Element.prototype.attachShadow).to.equal(patchedFn);
       });
     });
 
@@ -1301,6 +1304,30 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('handles browsers without attachInternals support', () => {
+      cy.window().then(win => {
+        // Create a minimal mock window without attachInternals
+        const mockWin = {
+          __percyPreflightActive: false,
+          Element: {
+            prototype: {
+              attachShadow: win.Element.prototype.attachShadow
+            }
+          },
+          HTMLElement: {
+            prototype: {} // no attachInternals
+          }
+        };
+
+        // Emit preflight on the mock window — should not throw and should skip internals
+        Cypress.emit('window:before:load', mockWin);
+
+        expect(mockWin.__percyPreflightActive).to.be.true;
+        expect(mockWin.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+        expect(mockWin.__percyInternals).to.be.undefined;
+      });
+    });
+
     it('bridges preflight data to runner window during snapshot', () => {
       cy.document().then(doc => {
         // Create a closed shadow root element before taking a snapshot
@@ -1312,6 +1339,18 @@ describe('percySnapshot', () => {
       cy.percySnapshot('Shadow DOM Bridge Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Shadow DOM Bridge Test');
+    });
+
+    it('handles snapshot when preflight data is absent from app window', () => {
+      // Remove preflight WeakMaps to exercise the falsy branches at lines 286-289
+      cy.window().then(win => {
+        delete win.__percyClosedShadowRoots;
+        delete win.__percyInternals;
+      });
+
+      cy.percySnapshot('No Preflight Data Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Preflight Data Test');
     });
   });
 });

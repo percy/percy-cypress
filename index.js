@@ -283,10 +283,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         // window where PercyDOM.serialize() executes. The preflight hook injects
         // these WeakMaps on the app's window, but PercyDOM reads from `window.*`.
         let appWin = doc.defaultView;
-        if (appWin?.__percyClosedShadowRoots) {
+        if (appWin && appWin.__percyClosedShadowRoots) {
           window.__percyClosedShadowRoots = appWin.__percyClosedShadowRoots;
         }
-        if (appWin?.__percyInternals) {
+        if (appWin && appWin.__percyInternals) {
           window.__percyInternals = appWin.__percyInternals;
         }
 
