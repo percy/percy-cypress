@@ -1273,10 +1273,6 @@ describe('percySnapshot', () => {
 
     it('is idempotent and skips if __percyPreflightActive is already set', () => {
       cy.window().then(win => {
-        // Store a reference to the current patched attachShadow
-        const patchedAttachShadow = win.Element.prototype.attachShadow;
-
-        // Manually fire the event handler again by simulating re-entry
         win.__percyPreflightActive = true;
 
         // Trigger a new page load which would re-run the preflight
