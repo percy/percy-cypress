@@ -247,6 +247,17 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
+        // Readiness gate — runs before serialize when CLI supports it (PER-7348).
+        // Uses typeof guard for backward compat with older CLI that lacks waitForReady.
+        const readinessConfig = options.readiness || utils.percy?.config?.snapshot?.readiness || {};
+        if (readinessConfig.preset !== 'disabled' && typeof window.PercyDOM?.waitForReady === 'function') {
+          try {
+            await window.PercyDOM.waitForReady(readinessConfig);
+          } catch (e) {
+            log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
+          }
+        }
+
         const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
