@@ -10,7 +10,8 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 // Inject Percy preflight script before every page load to intercept
 // closed shadow roots and ElementInternals. This runs before the page's
 // own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
-if (!Cypress.__percyPreflightRegistered) {
+function registerPreflight() {
+  if (Cypress.__percyPreflightRegistered) return false;
   Cypress.__percyPreflightRegistered = true;
   Cypress.on('window:before:load', (win) => {
     if (win.__percyPreflightActive) return;
@@ -40,7 +41,9 @@ if (!Cypress.__percyPreflightRegistered) {
       win.__percyInternals = internalsMap;
     }
   });
+  return true;
 }
+registerPreflight();
 
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
@@ -347,4 +350,4 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion };
+module.exports = { createRegion, registerPreflight };
