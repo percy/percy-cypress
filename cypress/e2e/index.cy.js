@@ -1253,7 +1253,7 @@ describe('percySnapshot', () => {
           return;
         }
 
-        const tag = 'test-internals-' + Date.now();
+        const tag = 'test-internals-' + Math.random().toString(36).slice(2);
         class TestEl extends win.HTMLElement {
           static get formAssociated() { return true; }
 
@@ -1282,7 +1282,8 @@ describe('percySnapshot', () => {
         // Store reference to the already-patched attachShadow
         const patchedFn = win.Element.prototype.attachShadow;
 
-        // Re-emit the event on the same window to trigger the idempotency guard (line 14)
+        // Note: Cypress.emit is a private API used here for testing idempotency.
+        // This may break across Cypress major versions.
         Cypress.emit('window:before:load', win);
 
         // attachShadow should NOT have been re-patched
@@ -1304,7 +1305,7 @@ describe('percySnapshot', () => {
       });
     });
 
-    it('handles browsers without attachInternals support', () => {
+    it('skips ElementInternals setup when the API is unavailable', () => {
       cy.window().then(win => {
         // Create a minimal mock window without attachInternals
         const mockWin = {

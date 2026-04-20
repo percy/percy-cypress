@@ -10,34 +10,37 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 // Inject Percy preflight script before every page load to intercept
 // closed shadow roots and ElementInternals. This runs before the page's
 // own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
-Cypress.on('window:before:load', (win) => {
-  if (win.__percyPreflightActive) return;
-  win.__percyPreflightActive = true;
+if (!Cypress.__percyPreflightRegistered) {
+  Cypress.__percyPreflightRegistered = true;
+  Cypress.on('window:before:load', (win) => {
+    if (win.__percyPreflightActive) return;
+    win.__percyPreflightActive = true;
 
-  // Intercept closed shadow roots
-  let closedShadowRoots = new WeakMap();
-  let origAttachShadow = win.Element.prototype.attachShadow;
-  win.Element.prototype.attachShadow = function(init) {
-    let root = origAttachShadow.call(this, init);
-    if (init && init.mode === 'closed') {
-      closedShadowRoots.set(this, root);
-    }
-    return root;
-  };
-  win.__percyClosedShadowRoots = closedShadowRoots;
-
-  // Intercept ElementInternals for :state() capture
-  if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
-    let internalsMap = new WeakMap();
-    let origAttachInternals = win.HTMLElement.prototype.attachInternals;
-    win.HTMLElement.prototype.attachInternals = function() {
-      let internals = origAttachInternals.call(this);
-      internalsMap.set(this, internals);
-      return internals;
+    // Intercept closed shadow roots
+    let closedShadowRoots = new WeakMap();
+    let origAttachShadow = win.Element.prototype.attachShadow;
+    win.Element.prototype.attachShadow = function(init) {
+      let root = origAttachShadow.apply(this, arguments);
+      if (init && init.mode === 'closed') {
+        closedShadowRoots.set(this, root);
+      }
+      return root;
     };
-    win.__percyInternals = internalsMap;
-  }
-});
+    win.__percyClosedShadowRoots = closedShadowRoots;
+
+    // Intercept ElementInternals for :state() capture
+    if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
+      let internalsMap = new WeakMap();
+      let origAttachInternals = win.HTMLElement.prototype.attachInternals;
+      win.HTMLElement.prototype.attachInternals = function() {
+        let internals = origAttachInternals.apply(this, arguments);
+        internalsMap.set(this, internals);
+        return internals;
+      };
+      win.__percyInternals = internalsMap;
+    }
+  });
+}
 
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
@@ -283,12 +286,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         // window where PercyDOM.serialize() executes. The preflight hook injects
         // these WeakMaps on the app's window, but PercyDOM reads from `window.*`.
         let appWin = doc.defaultView;
-        if (appWin && appWin.__percyClosedShadowRoots) {
-          window.__percyClosedShadowRoots = appWin.__percyClosedShadowRoots;
-        }
-        if (appWin && appWin.__percyInternals) {
-          window.__percyInternals = appWin.__percyInternals;
-        }
+        window.__percyClosedShadowRoots = (appWin && appWin.__percyClosedShadowRoots) || undefined;
+        window.__percyInternals = (appWin && appWin.__percyInternals) || undefined;
 
         const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
