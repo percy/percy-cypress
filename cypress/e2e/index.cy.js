@@ -1291,6 +1291,11 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('sets Cypress.__percyPreflightRegistered to prevent duplicate registration', () => {
+      // The module-level guard sets this flag when index.js is first loaded
+      expect(Cypress.__percyPreflightRegistered).to.be.true;
+    });
+
     it('attachShadow still returns the shadow root correctly', () => {
       cy.document().then(doc => {
         const el = doc.createElement('div');

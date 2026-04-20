@@ -10,7 +10,6 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 // Inject Percy preflight script before every page load to intercept
 // closed shadow roots and ElementInternals. This runs before the page's
 // own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
-/* istanbul ignore next: guard against duplicate registration when index.js is required multiple times */
 if (!Cypress.__percyPreflightRegistered) {
   Cypress.__percyPreflightRegistered = true;
   Cypress.on('window:before:load', (win) => {
