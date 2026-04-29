@@ -65,48 +65,41 @@ const SKIP_IFRAME_SRCS = [
   'about:blank', 'about:srcdoc', 'javascript:', 'data:',
   'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
-const MAX_FRAME_DEPTH = 10;
 
-// Cypress runs in the same browser window as the AUT, so it can read same-origin
-// iframe contentDocument from JS but is blocked by the browser's same-origin
-// policy from reading cross-origin iframe content. We still emit a corsIframes
-// entry for each cross-origin iframe (so the CLI knows about the percyElementId)
-// — when contentDocument is inaccessible, iframeSnapshot stays null and the CLI
-// drops the entry. Nested-cross-origin-inside-cross-origin is therefore an
-// inherent Cypress limitation; we document it but still recurse through
-// accessible (same-origin) parents to find as many cross-origin frames as
-// possible to attempt.
-function collectCrossOriginIframes(dom, parentOrigin, depth, options, percyDOMScript, processedFrames, log) {
-  if (depth > MAX_FRAME_DEPTH) {
-    log.debug(`Reached max iframe nesting depth (${MAX_FRAME_DEPTH})`);
-    return;
-  }
-  const iframes = dom.querySelectorAll('iframe');
+// Cypress runs in the same browser window as the AUT and is blocked by the
+// browser's same-origin policy from reading cross-origin iframe content from
+// JS. We walk the top-level document only and emit a corsIframes entry for
+// every cross-origin iframe with a percyElementId; the entry's snapshot stays
+// null whenever the browser blocks access (which is the common case for true
+// cross-origin frames). The null-snapshot filter then drops those entries
+// before they go on the wire.
+//
+// Nested cross-origin iframes (cross-origin within cross-origin) are an
+// inherent Cypress limitation: even if we walked into the parent JS-side, the
+// browser would block reading the grandchild's content the same way. Users
+// who need that should reach for percy-playwright or percy-puppeteer where
+// the framework can address frames out-of-process.
+function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
+  const log = utils.logger('cypress');
+  try {
+    const currentUrl = new URL(dom.URL);
+    const processedFrames = [];
 
-  for (const iframe of iframes) {
-    const src = iframe.getAttribute('src');
-    const srcdoc = iframe.getAttribute('srcdoc');
-    const srcLower = src ? src.toLowerCase() : '';
-    if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
+    for (const iframe of dom.querySelectorAll('iframe')) {
+      const src = iframe.getAttribute('src');
+      const srcdoc = iframe.getAttribute('srcdoc');
+      const srcLower = src ? src.toLowerCase() : '';
+      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
 
-    let frameUrl;
-    try {
-      frameUrl = new URL(src, dom.URL || dom.baseURI || '');
-    } catch (e) {
-      log.debug(`Skipping iframe "${src}": ${e.message}`);
-      continue;
-    }
+      let frameUrl;
+      try {
+        frameUrl = new URL(src, currentUrl.href);
+      } catch (e) {
+        log.debug(`Skipping iframe "${src}": ${e.message}`);
+        continue;
+      }
+      if (frameUrl.origin === currentUrl.origin) continue;
 
-    const isCrossOrigin = frameUrl.origin !== parentOrigin;
-    let frameWindow, frameDocument;
-    try {
-      frameWindow = iframe.contentWindow;
-      frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
-    } catch (e) {
-      // Cross-origin access blocked — frameDocument stays undefined.
-    }
-
-    if (isCrossOrigin) {
       const percyElementId = iframe.getAttribute('data-percy-element-id');
       if (!percyElementId) {
         log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
@@ -115,6 +108,8 @@ function collectCrossOriginIframes(dom, parentOrigin, depth, options, percyDOMSc
 
       let iframeSnapshot = null;
       try {
+        const frameWindow = iframe.contentWindow;
+        const frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
         if (frameDocument) {
           if (!frameWindow.PercyDOM) {
             const script = frameDocument.createElement('script');
@@ -132,37 +127,7 @@ function collectCrossOriginIframes(dom, parentOrigin, depth, options, percyDOMSc
       }
 
       processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
-
-      // If the cross-origin frame happened to be accessible (rare in real
-      // browsers but can happen with about:blank-like edge cases or local
-      // dev), recurse to find any further cross-origin descendants.
-      if (frameDocument) {
-        try {
-          collectCrossOriginIframes(frameDocument, frameUrl.origin, depth + 1, options, percyDOMScript, processedFrames, log);
-        } catch (e) {
-          log.debug(`Could not recurse into iframe ${frameUrl.href}: ${e.message}`);
-        }
-      }
-    } else if (frameDocument) {
-      // Same-origin iframe — PercyDOM has already inlined its content via
-      // srcdoc, but it might contain its own cross-origin iframes that we
-      // still need entries for. Recurse without emitting an entry for this
-      // frame itself.
-      try {
-        collectCrossOriginIframes(frameDocument, frameUrl.origin, depth + 1, options, percyDOMScript, processedFrames, log);
-      } catch (e) {
-        log.debug(`Could not recurse into same-origin iframe ${frameUrl.href}: ${e.message}`);
-      }
     }
-  }
-}
-
-function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
-  const log = utils.logger('cypress');
-  try {
-    const currentUrl = new URL(dom.URL);
-    const processedFrames = [];
-    collectCrossOriginIframes(dom, currentUrl.origin, 1, options, percyDOMScript, processedFrames, log);
 
     // Drop entries whose snapshot couldn't be captured (true cross-origin
     // iframes that browser security blocks Cypress from reading). The CLI
