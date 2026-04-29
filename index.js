@@ -164,8 +164,17 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
     const processedFrames = [];
     collectCrossOriginIframes(dom, currentUrl.origin, 1, options, percyDOMScript, processedFrames, log);
 
-    if (processedFrames.length > 0) {
-      domSnapshot.corsIframes = processedFrames;
+    // Drop entries whose snapshot couldn't be captured (true cross-origin
+    // iframes that browser security blocks Cypress from reading). The CLI
+    // would discard them on validation anyway; filtering here saves wire size
+    // on pages with many ad/tracker iframes.
+    const usableFrames = processedFrames.filter(f => f.iframeSnapshot && f.iframeSnapshot.html);
+    const dropped = processedFrames.length - usableFrames.length;
+    if (dropped > 0) {
+      log.debug(`Dropping ${dropped} cross-origin iframe(s) with unreachable content (browser security)`);
+    }
+    if (usableFrames.length > 0) {
+      domSnapshot.corsIframes = usableFrames;
     }
   } catch (e) {
     log.debug(`Error during cross-origin iframe processing: ${e.message}`);
