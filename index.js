@@ -65,55 +65,104 @@ const SKIP_IFRAME_SRCS = [
   'about:blank', 'about:srcdoc', 'javascript:', 'data:',
   'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
+const MAX_FRAME_DEPTH = 10;
+
+// Cypress runs in the same browser window as the AUT, so it can read same-origin
+// iframe contentDocument from JS but is blocked by the browser's same-origin
+// policy from reading cross-origin iframe content. We still emit a corsIframes
+// entry for each cross-origin iframe (so the CLI knows about the percyElementId)
+// — when contentDocument is inaccessible, iframeSnapshot stays null and the CLI
+// drops the entry. Nested-cross-origin-inside-cross-origin is therefore an
+// inherent Cypress limitation; we document it but still recurse through
+// accessible (same-origin) parents to find as many cross-origin frames as
+// possible to attempt.
+function collectCrossOriginIframes(dom, parentOrigin, depth, options, percyDOMScript, processedFrames, log) {
+  if (depth > MAX_FRAME_DEPTH) {
+    log.debug(`Reached max iframe nesting depth (${MAX_FRAME_DEPTH})`);
+    return;
+  }
+  const iframes = dom.querySelectorAll('iframe');
+
+  for (const iframe of iframes) {
+    const src = iframe.getAttribute('src');
+    const srcdoc = iframe.getAttribute('srcdoc');
+    const srcLower = src ? src.toLowerCase() : '';
+    if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
+
+    let frameUrl;
+    try {
+      frameUrl = new URL(src, dom.URL || dom.baseURI || '');
+    } catch (e) {
+      log.debug(`Skipping iframe "${src}": ${e.message}`);
+      continue;
+    }
+
+    const isCrossOrigin = frameUrl.origin !== parentOrigin;
+    let frameWindow, frameDocument;
+    try {
+      frameWindow = iframe.contentWindow;
+      frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
+    } catch (e) {
+      // Cross-origin access blocked — frameDocument stays undefined.
+    }
+
+    if (isCrossOrigin) {
+      const percyElementId = iframe.getAttribute('data-percy-element-id');
+      if (!percyElementId) {
+        log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
+        continue;
+      }
+
+      let iframeSnapshot = null;
+      try {
+        if (frameDocument) {
+          if (!frameWindow.PercyDOM) {
+            const script = frameDocument.createElement('script');
+            script.textContent = percyDOMScript;
+            frameDocument.head.appendChild(script);
+            frameDocument.head.removeChild(script);
+          }
+          if (frameWindow.PercyDOM) {
+            iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
+          }
+        }
+      } catch (accessError) {
+        log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
+        iframeSnapshot = null;
+      }
+
+      processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
+
+      // If the cross-origin frame happened to be accessible (rare in real
+      // browsers but can happen with about:blank-like edge cases or local
+      // dev), recurse to find any further cross-origin descendants.
+      if (frameDocument) {
+        try {
+          collectCrossOriginIframes(frameDocument, frameUrl.origin, depth + 1, options, percyDOMScript, processedFrames, log);
+        } catch (e) {
+          log.debug(`Could not recurse into iframe ${frameUrl.href}: ${e.message}`);
+        }
+      }
+    } else if (frameDocument) {
+      // Same-origin iframe — PercyDOM has already inlined its content via
+      // srcdoc, but it might contain its own cross-origin iframes that we
+      // still need entries for. Recurse without emitting an entry for this
+      // frame itself.
+      try {
+        collectCrossOriginIframes(frameDocument, frameUrl.origin, depth + 1, options, percyDOMScript, processedFrames, log);
+      } catch (e) {
+        log.debug(`Could not recurse into same-origin iframe ${frameUrl.href}: ${e.message}`);
+      }
+    }
+  }
+}
 
 function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
   try {
     const currentUrl = new URL(dom.URL);
-    const iframes = dom.querySelectorAll('iframe');
     const processedFrames = [];
-
-    for (const iframe of iframes) {
-      const src = iframe.getAttribute('src');
-      const srcdoc = iframe.getAttribute('srcdoc');
-      const srcLower = src ? src.toLowerCase() : '';
-      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
-
-      try {
-        const frameUrl = new URL(src, currentUrl.href);
-        if (frameUrl.origin === currentUrl.origin) continue;
-
-        const percyElementId = iframe.getAttribute('data-percy-element-id');
-        if (!percyElementId) {
-          log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
-          continue;
-        }
-
-        let iframeSnapshot = null;
-        try {
-          const frameWindow = iframe.contentWindow;
-          const frameDocument = iframe.contentDocument || frameWindow?.document;
-          if (frameDocument) {
-            if (!frameWindow.PercyDOM) {
-              const script = frameDocument.createElement('script');
-              script.textContent = percyDOMScript;
-              frameDocument.head.appendChild(script);
-              frameDocument.head.removeChild(script);
-            }
-            if (frameWindow.PercyDOM) {
-              iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
-            }
-          }
-        } catch (accessError) {
-          log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
-          iframeSnapshot = null;
-        }
-
-        processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
-      } catch (e) {
-        log.debug(`Skipping iframe "${src}": ${e.message}`);
-      }
-    }
+    collectCrossOriginIframes(dom, currentUrl.origin, 1, options, percyDOMScript, processedFrames, log);
 
     if (processedFrames.length > 0) {
       domSnapshot.corsIframes = processedFrames;
