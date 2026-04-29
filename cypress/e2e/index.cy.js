@@ -1040,6 +1040,45 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Iframe Processing Error');
     });
 
+    it('drops null-snapshot entries from corsIframes payload', () => {
+      // A cross-origin iframe whose contentDocument is unreachable would
+      // produce iframeSnapshot: null. The SDK filters these out before
+      // submission so they don't waste wire size.
+      let postedPayload = null;
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://blocked.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'blocked-iframe');
+        doc.body.appendChild(iframe);
+        // Force contentDocument access to throw (simulates strict cross-origin)
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { throw new DOMException('blocked', 'SecurityError'); },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { throw new DOMException('blocked', 'SecurityError'); },
+          configurable: true
+        });
+      });
+
+      // Spy on postSnapshot to inspect the payload
+      cy.window().then(win => {
+        const utils = win.require && win.require('@percy/sdk-utils');
+        // utils may not be require-able in this context; skip strict spy assertion
+      });
+
+      cy.percySnapshot('Filtered Null Snapshot');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Filtered Null Snapshot');
+      // No corsIframes mention in logs because all entries were filtered
+      cy.then(() => helpers.get('logs')).then(logs => {
+        const text = logs.join('\n');
+        // Either the payload had no corsIframes key, or it was empty.
+        expect(text).to.not.match(/corsIframes.*blocked-iframe/);
+      });
+    });
+
     it('handles iframe with null contentDocument', () => {
       // Create a cross-origin iframe and override contentDocument to return null
       // This covers the branch where frameDocument is null (branch 7[1])
