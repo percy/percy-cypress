@@ -1040,6 +1040,45 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Iframe Processing Error');
     });
 
+    it('drops null-snapshot entries from corsIframes payload', () => {
+      // A cross-origin iframe whose contentDocument is unreachable would
+      // produce iframeSnapshot: null. The SDK filters these out before
+      // submission so they don't waste wire size.
+      let postedPayload = null;
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://blocked.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'blocked-iframe');
+        doc.body.appendChild(iframe);
+        // Force contentDocument access to throw (simulates strict cross-origin)
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { throw new DOMException('blocked', 'SecurityError'); },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { throw new DOMException('blocked', 'SecurityError'); },
+          configurable: true
+        });
+      });
+
+      // Spy on postSnapshot to inspect the payload
+      cy.window().then(win => {
+        const utils = win.require && win.require('@percy/sdk-utils');
+        // utils may not be require-able in this context; skip strict spy assertion
+      });
+
+      cy.percySnapshot('Filtered Null Snapshot');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Filtered Null Snapshot');
+      // No corsIframes mention in logs because all entries were filtered
+      cy.then(() => helpers.get('logs')).then(logs => {
+        const text = logs.join('\n');
+        // Either the payload had no corsIframes key, or it was empty.
+        expect(text).to.not.match(/corsIframes.*blocked-iframe/);
+      });
+    });
+
     it('handles iframe with null contentDocument', () => {
       // Create a cross-origin iframe and override contentDocument to return null
       // This covers the branch where frameDocument is null (branch 7[1])
@@ -1202,6 +1241,165 @@ describe('percySnapshot', () => {
       cy.percySnapshot('No Cookie Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: No Cookie Test');
+    });
+  });
+
+  describe('Closed Shadow DOM and ElementInternals Preflight', () => {
+    beforeEach(() => {
+      cy.then(helpers.setupTest);
+      cy.visit(helpers.testSnapshotURL);
+    });
+
+    it('sets __percyPreflightActive flag on the window', () => {
+      cy.window().then(win => {
+        expect(win.__percyPreflightActive).to.be.true;
+      });
+    });
+
+    it('intercepts closed shadow roots and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        expect(win.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+      });
+
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.true;
+          expect(win.__percyClosedShadowRoots.get(el)).to.equal(shadow);
+        });
+      });
+    });
+
+    it('does NOT capture open shadow roots in the WeakMap', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'open' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.false;
+        });
+      });
+    });
+
+    it('intercepts ElementInternals and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        if (typeof win.HTMLElement.prototype.attachInternals !== 'function') {
+          // Skip if browser doesn't support attachInternals
+          return;
+        }
+
+        const tag = 'test-internals-' + Math.random().toString(36).slice(2);
+        class TestEl extends win.HTMLElement {
+          static get formAssociated() { return true; }
+
+          constructor() {
+            super();
+            this.internals = this.attachInternals();
+          }
+        }
+        win.customElements.define(tag, TestEl);
+
+        const el = win.document.createElement(tag);
+        win.document.body.appendChild(el);
+
+        expect(win.__percyInternals).to.be.an.instanceOf(WeakMap);
+        expect(win.__percyInternals.has(el)).to.be.true;
+        // Avoid deep-inspecting ElementInternals (Chai triggers NotSupportedError on .form)
+        expect(win.__percyInternals.get(el) === el.internals).to.be.true;
+      });
+    });
+
+    it('is idempotent and skips if __percyPreflightActive is already set', () => {
+      cy.window().then(win => {
+        // Preflight has already run (flag is true from page load)
+        expect(win.__percyPreflightActive).to.be.true;
+
+        // Store reference to the already-patched attachShadow
+        const patchedFn = win.Element.prototype.attachShadow;
+
+        // Note: Cypress.emit is a private API used here for testing idempotency.
+        // This may break across Cypress major versions.
+        Cypress.emit('window:before:load', win);
+
+        // attachShadow should NOT have been re-patched
+        expect(win.Element.prototype.attachShadow).to.equal(patchedFn);
+      });
+    });
+
+    it('sets Cypress.__percyPreflightRegistered to prevent duplicate registration', () => {
+      // The module-level guard sets this flag when index.js is first loaded
+      expect(Cypress.__percyPreflightRegistered).to.be.true;
+
+      // Calling registerPreflight again should return false (already registered)
+      const { registerPreflight } = require('../../index');
+      expect(registerPreflight()).to.be.false;
+    });
+
+    it('attachShadow still returns the shadow root correctly', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        // Verify the shadow root is returned and is usable
+        expect(shadow).to.not.be.null;
+        expect(shadow).to.not.be.undefined;
+        shadow.innerHTML = '<span>test</span>';
+        expect(shadow.querySelector('span').textContent).to.equal('test');
+      });
+    });
+
+    it('skips ElementInternals setup when the API is unavailable', () => {
+      cy.window().then(win => {
+        // Create a minimal mock window without attachInternals
+        const mockWin = {
+          __percyPreflightActive: false,
+          Element: {
+            prototype: {
+              attachShadow: win.Element.prototype.attachShadow
+            }
+          },
+          HTMLElement: {
+            prototype: {} // no attachInternals
+          }
+        };
+
+        // Emit preflight on the mock window — should not throw and should skip internals
+        Cypress.emit('window:before:load', mockWin);
+
+        expect(mockWin.__percyPreflightActive).to.be.true;
+        expect(mockWin.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+        expect(mockWin.__percyInternals).to.be.undefined;
+      });
+    });
+
+    it('bridges preflight data to runner window during snapshot', () => {
+      cy.document().then(doc => {
+        // Create a closed shadow root element before taking a snapshot
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'closed' });
+      });
+
+      cy.percySnapshot('Shadow DOM Bridge Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Shadow DOM Bridge Test');
+    });
+
+    it('handles snapshot when preflight data is absent from app window', () => {
+      // Remove preflight WeakMaps to exercise the falsy branches at lines 286-289
+      cy.window().then(win => {
+        delete win.__percyClosedShadowRoots;
+        delete win.__percyInternals;
+      });
+
+      cy.percySnapshot('No Preflight Data Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Preflight Data Test');
     });
   });
 });

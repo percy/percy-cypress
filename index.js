@@ -7,6 +7,44 @@ const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
+// Inject Percy preflight script before every page load to intercept
+// closed shadow roots and ElementInternals. This runs before the page's
+// own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
+function registerPreflight() {
+  if (Cypress.__percyPreflightRegistered) return false;
+  Cypress.__percyPreflightRegistered = true;
+  Cypress.on('window:before:load', (win) => {
+    if (win.__percyPreflightActive) return;
+    win.__percyPreflightActive = true;
+
+    // Intercept closed shadow roots
+    let closedShadowRoots = new WeakMap();
+    let origAttachShadow = win.Element.prototype.attachShadow;
+    win.Element.prototype.attachShadow = function(init) {
+      let root = origAttachShadow.apply(this, arguments);
+      if (init && init.mode === 'closed') {
+        closedShadowRoots.set(this, root);
+      }
+      return root;
+    };
+    win.__percyClosedShadowRoots = closedShadowRoots;
+
+    // Intercept ElementInternals for :state() capture
+    if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
+      let internalsMap = new WeakMap();
+      let origAttachInternals = win.HTMLElement.prototype.attachInternals;
+      win.HTMLElement.prototype.attachInternals = function() {
+        let internals = origAttachInternals.apply(this, arguments);
+        internalsMap.set(this, internals);
+        return internals;
+      };
+      win.__percyInternals = internalsMap;
+    }
+  });
+  return true;
+}
+registerPreflight();
+
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
 utils.request.fetch = async function fetch(url, options) {
@@ -28,57 +66,105 @@ const SKIP_IFRAME_SRCS = [
   'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
 
+function resolveIgnoreSelectors(options = {}) {
+  const list = options.ignoreIframeSelectors
+    ?? utils.percy?.config?.snapshot?.ignoreIframeSelectors
+    ?? [];
+  return Array.isArray(list) ? list.filter(s => typeof s === 'string' && s.trim()) : [];
+}
+
+// Cypress runs in the same browser window as the AUT and is blocked by the
+// browser's same-origin policy from reading cross-origin iframe content from
+// JS. We walk the top-level document only and emit a corsIframes entry for
+// every cross-origin iframe with a percyElementId; the entry's snapshot stays
+// null whenever the browser blocks access (which is the common case for true
+// cross-origin frames). The null-snapshot filter then drops those entries
+// before they go on the wire.
+//
+// Nested cross-origin iframes (cross-origin within cross-origin) are an
+// inherent Cypress limitation: even if we walked into the parent JS-side, the
+// browser would block reading the grandchild's content the same way. Users
+// who need that should reach for percy-playwright or percy-puppeteer where
+// the framework can address frames out-of-process.
 function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
+  const ignoreSelectors = resolveIgnoreSelectors(options);
   try {
     const currentUrl = new URL(dom.URL);
-    const iframes = dom.querySelectorAll('iframe');
     const processedFrames = [];
 
-    for (const iframe of iframes) {
+    for (const iframe of dom.querySelectorAll('iframe')) {
+      // Per-element opt-out via data-percy-ignore attribute.
+      if (iframe.hasAttribute('data-percy-ignore')) {
+        log.debug(`Skipping iframe marked with data-percy-ignore`);
+        continue;
+      }
+      // Per-snapshot opt-out via ignoreIframeSelectors option / config.
+      if (ignoreSelectors.length) {
+        let skipBySelector = false;
+        for (const sel of ignoreSelectors) {
+          try { if (iframe.matches(sel)) { skipBySelector = true; break; } } catch (e) { /* invalid */ }
+        }
+        if (skipBySelector) {
+          log.debug(`Skipping iframe matching ignoreIframeSelectors`);
+          continue;
+        }
+      }
+
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
       const srcLower = src ? src.toLowerCase() : '';
       if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
 
+      let frameUrl;
       try {
-        const frameUrl = new URL(src, currentUrl.href);
-        if (frameUrl.origin === currentUrl.origin) continue;
-
-        const percyElementId = iframe.getAttribute('data-percy-element-id');
-        if (!percyElementId) {
-          log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
-          continue;
-        }
-
-        let iframeSnapshot = null;
-        try {
-          const frameWindow = iframe.contentWindow;
-          const frameDocument = iframe.contentDocument || frameWindow?.document;
-          if (frameDocument) {
-            if (!frameWindow.PercyDOM) {
-              const script = frameDocument.createElement('script');
-              script.textContent = percyDOMScript;
-              frameDocument.head.appendChild(script);
-              frameDocument.head.removeChild(script);
-            }
-            if (frameWindow.PercyDOM) {
-              iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
-            }
-          }
-        } catch (accessError) {
-          log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
-          iframeSnapshot = null;
-        }
-
-        processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
+        frameUrl = new URL(src, currentUrl.href);
       } catch (e) {
         log.debug(`Skipping iframe "${src}": ${e.message}`);
+        continue;
       }
+      if (frameUrl.origin === currentUrl.origin) continue;
+
+      const percyElementId = iframe.getAttribute('data-percy-element-id');
+      if (!percyElementId) {
+        log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
+        continue;
+      }
+
+      let iframeSnapshot = null;
+      try {
+        const frameWindow = iframe.contentWindow;
+        const frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
+        if (frameDocument) {
+          if (!frameWindow.PercyDOM) {
+            const script = frameDocument.createElement('script');
+            script.textContent = percyDOMScript;
+            frameDocument.head.appendChild(script);
+            frameDocument.head.removeChild(script);
+          }
+          if (frameWindow.PercyDOM) {
+            iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
+          }
+        }
+      } catch (accessError) {
+        log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
+        iframeSnapshot = null;
+      }
+
+      processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
     }
 
-    if (processedFrames.length > 0) {
-      domSnapshot.corsIframes = processedFrames;
+    // Drop entries whose snapshot couldn't be captured (true cross-origin
+    // iframes that browser security blocks Cypress from reading). The CLI
+    // would discard them on validation anyway; filtering here saves wire size
+    // on pages with many ad/tracker iframes.
+    const usableFrames = processedFrames.filter(f => f.iframeSnapshot && f.iframeSnapshot.html);
+    const dropped = processedFrames.length - usableFrames.length;
+    if (dropped > 0) {
+      log.debug(`Dropping ${dropped} cross-origin iframe(s) with unreachable content (browser security)`);
+    }
+    if (usableFrames.length > 0) {
+      domSnapshot.corsIframes = usableFrames;
     }
   } catch (e) {
     log.debug(`Error during cross-origin iframe processing: ${e.message}`);
@@ -247,6 +333,13 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
+        // Bridge preflight data from the app's window (AUT iframe) to the runner's
+        // window where PercyDOM.serialize() executes. The preflight hook injects
+        // these WeakMaps on the app's window, but PercyDOM reads from `window.*`.
+        let appWin = doc.defaultView;
+        window.__percyClosedShadowRoots = (appWin && appWin.__percyClosedShadowRoots) || undefined;
+        window.__percyInternals = (appWin && appWin.__percyInternals) || undefined;
+
         const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
@@ -305,4 +398,4 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion };
+module.exports = { createRegion, registerPreflight };
