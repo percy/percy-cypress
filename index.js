@@ -66,6 +66,13 @@ const SKIP_IFRAME_SRCS = [
   'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
 ];
 
+function resolveIgnoreSelectors(options = {}) {
+  const list = options.ignoreIframeSelectors
+    ?? utils.percy?.config?.snapshot?.ignoreIframeSelectors
+    ?? [];
+  return Array.isArray(list) ? list.filter(s => typeof s === 'string' && s.trim()) : [];
+}
+
 // Cypress runs in the same browser window as the AUT and is blocked by the
 // browser's same-origin policy from reading cross-origin iframe content from
 // JS. We walk the top-level document only and emit a corsIframes entry for
@@ -81,11 +88,29 @@ const SKIP_IFRAME_SRCS = [
 // the framework can address frames out-of-process.
 function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
+  const ignoreSelectors = resolveIgnoreSelectors(options);
   try {
     const currentUrl = new URL(dom.URL);
     const processedFrames = [];
 
     for (const iframe of dom.querySelectorAll('iframe')) {
+      // Per-element opt-out via data-percy-ignore attribute.
+      if (iframe.hasAttribute('data-percy-ignore')) {
+        log.debug(`Skipping iframe marked with data-percy-ignore`);
+        continue;
+      }
+      // Per-snapshot opt-out via ignoreIframeSelectors option / config.
+      if (ignoreSelectors.length) {
+        let skipBySelector = false;
+        for (const sel of ignoreSelectors) {
+          try { if (iframe.matches(sel)) { skipBySelector = true; break; } } catch (e) { /* invalid */ }
+        }
+        if (skipBySelector) {
+          log.debug(`Skipping iframe matching ignoreIframeSelectors`);
+          continue;
+        }
+      }
+
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
       const srcLower = src ? src.toLowerCase() : '';
