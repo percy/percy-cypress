@@ -407,6 +407,91 @@ describe('percySnapshot', () => {
     });
   });
 
+  describe('readiness gate (PER-7348)', () => {
+    // Pre-populate window.PercyDOM so the SDK's `injectPercyDOM` early-returns
+    // and leaves our stub in place. This lets us observe how the SDK interacts
+    // with waitForReady / serialize.
+    const installPercyDOMStub = (stub) => {
+      cy.window().then((win) => {
+        win.PercyDOM = stub;
+      });
+    };
+
+    it('calls waitForReady before serialize when the CLI exposes it', () => {
+      const calls = [];
+      installPercyDOMStub({
+        waitForReady: (cfg) => { calls.push(['waitForReady', cfg]); return Promise.resolve(); },
+        serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
+      });
+
+      cy.percySnapshot('readiness-happy-path');
+
+      cy.then(() => {
+        const order = calls.map(([name]) => name);
+        expect(order.indexOf('waitForReady')).to.be.lessThan(order.indexOf('serialize'));
+      });
+    });
+
+    it('skips waitForReady when the CLI is old (function is absent)', () => {
+      const calls = [];
+      // No waitForReady — simulating an older CLI. serialize must still run.
+      installPercyDOMStub({
+        serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
+      });
+
+      cy.percySnapshot('readiness-backward-compat');
+
+      cy.then(() => {
+        expect(calls.map(([name]) => name)).to.deep.equal(['serialize']);
+      });
+    });
+
+    it('skips waitForReady when preset is disabled', () => {
+      const calls = [];
+      installPercyDOMStub({
+        waitForReady: (cfg) => { calls.push(['waitForReady', cfg]); return Promise.resolve(); },
+        serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
+      });
+
+      cy.percySnapshot('readiness-disabled', { readiness: { preset: 'disabled' } });
+
+      cy.then(() => {
+        expect(calls.map(([name]) => name)).to.deep.equal(['serialize']);
+      });
+    });
+
+    it('proceeds to serialize when waitForReady rejects', () => {
+      const calls = [];
+      installPercyDOMStub({
+        waitForReady: () => { calls.push(['waitForReady']); return Promise.reject(new Error('readiness failed')); },
+        serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
+      });
+
+      cy.percySnapshot('readiness-rejection');
+
+      cy.then(() => {
+        expect(calls.map(([name]) => name)).to.deep.equal(['waitForReady', 'serialize']);
+      });
+    });
+
+    it('attaches readiness diagnostics returned by waitForReady to domSnapshot', () => {
+      const diagnostics = { passed: true, timed_out: false, preset: 'balanced', total_duration_ms: 42, checks: {} };
+      let capturedSnapshot;
+      installPercyDOMStub({
+        waitForReady: () => Promise.resolve(diagnostics),
+        serialize: () => { capturedSnapshot = { html: '<html></html>' }; return capturedSnapshot; }
+      });
+
+      cy.percySnapshot('readiness-diagnostics');
+
+      cy.then(() => {
+        // The SDK assigns readiness_diagnostics onto the domSnapshot object
+        // returned by serialize, so the CLI receives it via snapshot.js:225.
+        expect(capturedSnapshot.readiness_diagnostics).to.deep.equal(diagnostics);
+      });
+    });
+  });
+
   describe('createRegion function', () => {
     it('creates a region object with default values', () => {
       const region = createRegion();
