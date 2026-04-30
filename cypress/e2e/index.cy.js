@@ -473,6 +473,23 @@ describe('percySnapshot', () => {
         expect(calls.map(([name]) => name)).to.deep.equal(['waitForReady', 'serialize']);
       });
     });
+
+    it('attaches readiness diagnostics returned by waitForReady to domSnapshot', () => {
+      const diagnostics = { passed: true, timed_out: false, preset: 'balanced', total_duration_ms: 42, checks: {} };
+      let capturedSnapshot;
+      installPercyDOMStub({
+        waitForReady: () => Promise.resolve(diagnostics),
+        serialize: () => { capturedSnapshot = { html: '<html></html>' }; return capturedSnapshot; }
+      });
+
+      cy.percySnapshot('readiness-diagnostics');
+
+      cy.then(() => {
+        // The SDK assigns readiness_diagnostics onto the domSnapshot object
+        // returned by serialize, so the CLI receives it via snapshot.js:225.
+        expect(capturedSnapshot.readiness_diagnostics).to.deep.equal(diagnostics);
+      });
+    });
   });
 
   describe('createRegion function', () => {
