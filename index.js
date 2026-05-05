@@ -211,8 +211,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     const useMinHeight = _isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
-    const configOptions = utils.percy?.config?.snapshot || {};
-    const mergedCaptureOptions = { ...configOptions, ...options };
+    const mergedCaptureOptions = utils.mergeSnapshotOptions(options);
     const defaultHeight = useMinHeight
       ? (mergedCaptureOptions.minHeight || originalHeight)
       : originalHeight;
@@ -249,8 +248,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
-        const configOptions = utils.percy?.config?.snapshot || {};
-        const mergedOptions = { ...configOptions, ...options };
+        const mergedOptions = utils.mergeSnapshotOptions(options);
         const domSnapshot = window.PercyDOM.serialize({ ...mergedOptions, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
