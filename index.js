@@ -218,8 +218,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     const useMinHeight = _isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+    const configOptions = utils.percy?.config?.snapshot || {};
+    const mergedCaptureOptions = { ...configOptions, ...options };
     const defaultHeight = useMinHeight
-      ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
+      ? (mergedCaptureOptions.minHeight || originalHeight)
       : originalHeight;
 
     const rawSleepTime = _isResponsive
@@ -283,7 +285,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           }
         }
 
-        const domSnapshot = PercyDOM.serialize({ ...forwardOpts, dom: doc });
+        // Merge .percy.yml config options with snapshot options (snapshot options take priority).
+        // forwardOpts has the SDK-local `readiness` key already stripped.
+        const domSnapshot = PercyDOM.serialize({ ...configOptions, ...forwardOpts, dom: doc });
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
         // Defensive: serialize() may return non-object in legacy @percy/dom builds.
