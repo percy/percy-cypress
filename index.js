@@ -211,8 +211,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     const useMinHeight = _isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+    const configOptions = utils.percy?.config?.snapshot || {};
+    const mergedCaptureOptions = { ...configOptions, ...options };
     const defaultHeight = useMinHeight
-      ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
+      ? (mergedCaptureOptions.minHeight || originalHeight)
       : originalHeight;
 
     const rawSleepTime = _isResponsive
@@ -247,7 +249,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
-        const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+        const configOptions = utils.percy?.config?.snapshot || {};
+        const mergedOptions = { ...configOptions, ...options };
+        const domSnapshot = window.PercyDOM.serialize({ ...mergedOptions, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
         processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
