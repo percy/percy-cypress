@@ -1044,7 +1044,6 @@ describe('percySnapshot', () => {
       // A cross-origin iframe whose contentDocument is unreachable would
       // produce iframeSnapshot: null. The SDK filters these out before
       // submission so they don't waste wire size.
-      let postedPayload = null;
       cy.document().then(doc => {
         const iframe = doc.createElement('iframe');
         iframe.setAttribute('src', 'https://blocked.example.com/page');
@@ -1059,12 +1058,6 @@ describe('percySnapshot', () => {
           get() { throw new DOMException('blocked', 'SecurityError'); },
           configurable: true
         });
-      });
-
-      // Spy on postSnapshot to inspect the payload
-      cy.window().then(win => {
-        const utils = win.require && win.require('@percy/sdk-utils');
-        // utils may not be require-able in this context; skip strict spy assertion
       });
 
       cy.percySnapshot('Filtered Null Snapshot');

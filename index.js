@@ -1,6 +1,10 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 const { getEnvValue, lazyResolveAddress } = require('./env-utils');
+const {
+  isUnsupportedIframeSrc,
+  normalizeIgnoreSelectors
+} = require('./iframe-utils');
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
@@ -61,16 +65,12 @@ function cylog(message, meta) {
   });
 }
 
-const SKIP_IFRAME_SRCS = [
-  'about:blank', 'about:srcdoc', 'javascript:', 'data:',
-  'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
-];
-
 function resolveIgnoreSelectors(options = {}) {
-  const list = options.ignoreIframeSelectors
-    ?? utils.percy?.config?.snapshot?.ignoreIframeSelectors
-    ?? [];
-  return Array.isArray(list) ? list.filter(s => typeof s === 'string' && s.trim()) : [];
+  return normalizeIgnoreSelectors(
+    options.ignoreIframeSelectors ??
+      utils.percy?.config?.snapshot?.ignoreIframeSelectors ??
+      []
+  );
 }
 
 // Cypress runs in the same browser window as the AUT and is blocked by the
@@ -96,7 +96,7 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
     for (const iframe of dom.querySelectorAll('iframe')) {
       // Per-element opt-out via data-percy-ignore attribute.
       if (iframe.hasAttribute('data-percy-ignore')) {
-        log.debug(`Skipping iframe marked with data-percy-ignore`);
+        log.debug('Skipping iframe marked with data-percy-ignore');
         continue;
       }
       // Per-snapshot opt-out via ignoreIframeSelectors option / config.
@@ -106,15 +106,14 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
           try { if (iframe.matches(sel)) { skipBySelector = true; break; } } catch (e) { /* invalid */ }
         }
         if (skipBySelector) {
-          log.debug(`Skipping iframe matching ignoreIframeSelectors`);
+          log.debug('Skipping iframe matching ignoreIframeSelectors');
           continue;
         }
       }
 
       const src = iframe.getAttribute('src');
       const srcdoc = iframe.getAttribute('srcdoc');
-      const srcLower = src ? src.toLowerCase() : '';
-      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
+      if (srcdoc || isUnsupportedIframeSrc(src ? src.toLowerCase() : '')) continue;
 
       let frameUrl;
       try {
