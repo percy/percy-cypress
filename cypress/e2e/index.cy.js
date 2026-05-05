@@ -997,6 +997,52 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Mixed Iframes Test');
     });
 
+    it('skips iframes marked with data-percy-ignore', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'ignored-iframe');
+        iframe.setAttribute('data-percy-ignore', '');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Data Percy Ignore');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Data Percy Ignore');
+    });
+
+    it('skips iframes matching ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://ad-network.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'ad-iframe');
+        iframe.className = 'ad-frame';
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Selector Ignore', { ignoreIframeSelectors: ['.ad-frame'] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Selector Ignore');
+    });
+
+    it('tolerates invalid selectors in ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'still-captured');
+        doc.body.appendChild(iframe);
+      });
+
+      // '[broken===' is not a valid CSS selector — iframe.matches() throws,
+      // the inner try/catch swallows, and the iframe stays in the capture set.
+      cy.percySnapshot('Iframe Bad Selector', { ignoreIframeSelectors: ['[broken==='] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Bad Selector');
+    });
+
     it('handles cross-origin iframe where content access throws', () => {
       // Add a cross-origin iframe with sandbox to ensure cross-origin restriction.
       // The browser blocks contentWindow access, exercising the catch(accessError) block.
