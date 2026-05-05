@@ -3,8 +3,7 @@
 // SDKs (puppeteer, playwright, nightwatch, cypress, webdriverio, protractor).
 
 const UNSUPPORTED_IFRAME_SRCS = [
-  'about:blank',
-  'about:srcdoc',
+  'about:',
   'javascript:',
   'data:',
   'blob:',
