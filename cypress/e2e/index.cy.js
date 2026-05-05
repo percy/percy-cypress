@@ -1041,23 +1041,17 @@ describe('percySnapshot', () => {
     });
 
     it('drops null-snapshot entries from corsIframes payload', () => {
-      // A cross-origin iframe whose contentDocument is unreachable would
-      // produce iframeSnapshot: null. The SDK filters these out before
-      // submission so they don't waste wire size.
+      // A cross-origin iframe whose contentDocument is unreachable produces
+      // iframeSnapshot: null. The SDK filters these out before submission so
+      // they don't waste wire size. We use a real cross-origin src instead of
+      // overriding contentDocument with a throwing getter (which would crash
+      // the in-page PercyDOM serializer's own iframe walk before the SDK's
+      // filter ever runs).
       cy.document().then(doc => {
         const iframe = doc.createElement('iframe');
         iframe.setAttribute('src', 'https://blocked.example.com/page');
         iframe.setAttribute('data-percy-element-id', 'blocked-iframe');
         doc.body.appendChild(iframe);
-        // Force contentDocument access to throw (simulates strict cross-origin)
-        Object.defineProperty(iframe, 'contentDocument', {
-          get() { throw new DOMException('blocked', 'SecurityError'); },
-          configurable: true
-        });
-        Object.defineProperty(iframe, 'contentWindow', {
-          get() { throw new DOMException('blocked', 'SecurityError'); },
-          configurable: true
-        });
       });
 
       cy.percySnapshot('Filtered Null Snapshot');
