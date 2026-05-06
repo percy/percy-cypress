@@ -1,10 +1,7 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 const { getEnvValue, lazyResolveAddress } = require('./env-utils');
-const {
-  isUnsupportedIframeSrc,
-  normalizeIgnoreSelectors
-} = require('./iframe-utils');
+const { isUnsupportedIframeSrc, normalizeIgnoreSelectors } = utils;
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
