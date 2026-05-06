@@ -1027,6 +1027,22 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Iframe Selector Ignore');
     });
 
+    it('tolerates non-array ignoreIframeSelectors (normalizeIgnoreSelectors falsy branch)', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'still-captured-non-array');
+        doc.body.appendChild(iframe);
+      });
+
+      // Passing a string instead of an array — normalizeIgnoreSelectors returns []
+      // and the iframe is processed normally.
+      cy.percySnapshot('Iframe Non-Array Selectors', { ignoreIframeSelectors: 'not-an-array' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Non-Array Selectors');
+    });
+
     it('does not skip iframes that do not match ignoreIframeSelectors', () => {
       cy.document().then(doc => {
         const iframe = doc.createElement('iframe');
