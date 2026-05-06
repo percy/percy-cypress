@@ -1027,6 +1027,24 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Iframe Selector Ignore');
     });
 
+    it('does not skip iframes that do not match ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'kept-iframe');
+        // class does NOT match the selector below
+        iframe.className = 'normal-frame';
+        doc.body.appendChild(iframe);
+      });
+
+      // Iframe doesn't have .ad-frame class — iframe.matches returns false,
+      // skipBySelector stays false, iframe is processed normally.
+      cy.percySnapshot('Iframe Selector NoMatch', { ignoreIframeSelectors: ['.ad-frame'] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Selector NoMatch');
+    });
+
     it('tolerates invalid selectors in ignoreIframeSelectors', () => {
       cy.document().then(doc => {
         const iframe = doc.createElement('iframe');

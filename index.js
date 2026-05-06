@@ -65,7 +65,7 @@ function cylog(message, meta) {
   });
 }
 
-function resolveIgnoreSelectors(options = {}) {
+function resolveIgnoreSelectors(options) {
   return normalizeIgnoreSelectors(
     options.ignoreIframeSelectors ??
       utils.percy?.config?.snapshot?.ignoreIframeSelectors ??
