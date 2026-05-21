@@ -130,6 +130,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   }
   name = name || cy.state('runnable').fullTitle();
 
+  // `readiness` is consumed locally by the SDK; the CLI already gets it from
+  // .percy.yml healthcheck. Strip it so it doesn't leak into serialize() args
+  // or round-trip back through postSnapshot.
+  const { readiness: _readiness, ...forwardOpts } = options;
+
   const meta = { snapshot: { name, testCase: options.testCase } };
 
   const withLog = async (func, context, _throw) => {
@@ -247,11 +252,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
-        // Readiness gate — runs before serialize when CLI supports it (PER-7348).
-        // Uses typeof guard for backward compat with older CLI that lacks waitForReady.
-        // Diagnostics are captured and attached to domSnapshot so the CLI can log them.
+        // Readiness gate (PER-7348). Backward-compat: older CLI bundles lack waitForReady.
+        // Shallow-merge so per-snapshot keys override global ones without wiping them
+        // — `preset: disabled` set in .percy.yml is inherited by partial overrides.
         let readinessDiagnostics;
-        const readinessConfig = options.readiness || utils.percy?.config?.snapshot?.readiness || {};
+        const readinessConfig = {
+          ...(utils.percy?.config?.snapshot?.readiness || {}),
+          ...(options.readiness || {})
+        };
         if (readinessConfig.preset !== 'disabled' && typeof window.PercyDOM?.waitForReady === 'function') {
           try {
             readinessDiagnostics = await window.PercyDOM.waitForReady(readinessConfig);
@@ -260,10 +268,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           }
         }
 
-        const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+        const domSnapshot = window.PercyDOM.serialize({ ...forwardOpts, dom: doc });
 
-        // Attach readiness diagnostics so the CLI can log timing and pass/fail
-        if (readinessDiagnostics) {
+        // Attach readiness diagnostics so the CLI can log timing and pass/fail.
+        // Guard the shape — older/forked @percy/dom builds may return non-objects.
+        if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
           domSnapshot.readiness_diagnostics = readinessDiagnostics;
         }
         if (width !== null) domSnapshot.width = width;
@@ -302,7 +311,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         try {
           let response = await withRetry(async () => await withLog(async () => {
             return await utils.postSnapshot({
-              ...options,
+              ...forwardOpts,
               environmentInfo: ENV_INFO,
               clientInfo: CLIENT_INFO,
               domSnapshot,
