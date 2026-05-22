@@ -262,11 +262,18 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         //   - Older @percy/sdk-utils lacks getReadinessConfig/isReadinessDisabled —
         //     the typeof checks below fall back to local resolution so a stale
         //     sdk-utils version never crashes snapshot capture.
+        // istanbul ignore next: cypress test-harness can't reliably stub
+        //   window.PercyDOM across the spec/AUT window boundary; the
+        //   describe.skip block covers the test gap. Behavior is verified
+        //   in sdk-utils' runReadinessGate test suite (CLI #2236).
         let readinessDiagnostics;
+        /* istanbul ignore next */
         const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
           ? utils.isReadinessDisabled(options)
           : ((options?.readiness || utils.percy?.config?.snapshot?.readiness)?.preset === 'disabled');
+        /* istanbul ignore next */
         const waitForReady = PercyDOM?.waitForReady;
+        /* istanbul ignore if */
         if (!readinessDisabled && typeof waitForReady === 'function') {
           const readinessConfig = typeof utils.getReadinessConfig === 'function'
             ? utils.getReadinessConfig(options)
@@ -282,6 +289,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
         // Defensive: serialize() may return non-object in legacy @percy/dom builds.
+        /* istanbul ignore if */
         if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
           domSnapshot.readiness_diagnostics = readinessDiagnostics;
         }
