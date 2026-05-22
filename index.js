@@ -1,4 +1,4 @@
-const utils = require('@percy/sdk-utils');
+const utils = require('./_iframe_shim');
 const { createRegion } = require('./createRegion');
 const { getEnvValue, lazyResolveAddress } = require('./env-utils');
 const { isUnsupportedIframeSrc, normalizeIgnoreSelectors } = utils;
@@ -18,28 +18,38 @@ function registerPreflight() {
     if (win.__percyPreflightActive) return;
     win.__percyPreflightActive = true;
 
-    // Intercept closed shadow roots
+    // Intercept closed shadow roots. WeakMap holds shadowRoot for lookup;
+    // a parallel hosts array lets us iterate them later (WeakMap isn't
+    // iterable). Hosts are held strongly while the page is alive — that's
+    // bounded by the lifetime of a single Cypress test run, so leak risk is
+    // negligible.
     let closedShadowRoots = new WeakMap();
+    let closedShadowHosts = [];
     let origAttachShadow = win.Element.prototype.attachShadow;
     win.Element.prototype.attachShadow = function(init) {
       let root = origAttachShadow.apply(this, arguments);
       if (init && init.mode === 'closed') {
         closedShadowRoots.set(this, root);
+        closedShadowHosts.push(this);
       }
       return root;
     };
     win.__percyClosedShadowRoots = closedShadowRoots;
+    win.__percyClosedShadowHosts = closedShadowHosts;
 
     // Intercept ElementInternals for :state() capture
     if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
       let internalsMap = new WeakMap();
+      let internalsHosts = [];
       let origAttachInternals = win.HTMLElement.prototype.attachInternals;
       win.HTMLElement.prototype.attachInternals = function() {
         let internals = origAttachInternals.apply(this, arguments);
         internalsMap.set(this, internals);
+        internalsHosts.push(this);
         return internals;
       };
       win.__percyInternals = internalsMap;
+      win.__percyInternalsHosts = internalsHosts;
     }
   });
   return true;
@@ -194,12 +204,35 @@ async function checkPreconditions(log, name) {
   return { skip: false, percyDOMScript };
 }
 
-function injectPercyDOM(percyDOMScript) {
-  if (!window.PercyDOM) {
-    // eslint-disable-next-line no-eval
-    (0, eval)(percyDOMScript);
-  }
+// Inject the PercyDOM serializer INTO the AUT window so it walks the AUT
+// document with the AUT's own document/HTMLElement constructors. Running
+// PercyDOM in the runner window and passing `dom: aut_doc` loses cross-window
+// state (shadow roots get dropped during cloneNode because clone.attachShadow
+// has to happen with the AUT document's element prototype).
+function injectPercyDOM(targetWin, percyDOMScript) {
+  if (targetWin.PercyDOM) return;
+  // Inject via a <script> element appended to the target document. Browsers
+  // evaluate inline scripts in the global scope of the document that owns
+  // them, so `PercyDOM` ends up on `targetWin` even when the caller lives in
+  // a different window/realm (which is the case for Cypress: the SDK code
+  // runs in the runner window, the page lives in the AUT iframe). We avoid
+  // `targetWin.eval(...)` because indirect eval still runs in the caller's
+  // global scope, which would land `PercyDOM` on the runner.
+  const script = targetWin.document.createElement('script');
+  script.textContent = percyDOMScript;
+  targetWin.document.head.appendChild(script);
+  targetWin.document.head.removeChild(script);
 }
+
+// The preflight (window:before:load) collects:
+//   • `__percyClosedShadowRoots`: WeakMap<host, ShadowRoot> for closed roots
+//   • `__percyInternals`:          WeakMap<host, ElementInternals>
+// We expose these on the AUT window so @percy/dom (running inside the AUT)
+// can consume them during serialization. The SDK's job stops at "give the
+// serializer everything it needs"; turning that data into snapshot HTML is
+// the CLI's responsibility (in @percy/dom). Once @percy/dom reads from these
+// hooks, closed shadow + ElementInternals show up in the snapshot
+// automatically — no DOM mutation needed here.
 
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
@@ -323,20 +356,18 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
       if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-      // Serialize DOM and collect snapshot
+      // Serialize DOM and collect snapshot. PercyDOM must run inside the AUT
+      // window so it sees the page's document/Element prototypes — running
+      // it in the runner window and passing `dom: aut_doc` would drop shadow
+      // roots during cross-window cloneNode.
       cy.document({ log: false }).then(async doc => {
         if (_skip || !_percyDOMScript) return;
+        const appWin = doc.defaultView;
+        if (!appWin) return;
 
-        injectPercyDOM(_percyDOMScript);
+        injectPercyDOM(appWin, _percyDOMScript);
 
-        // Bridge preflight data from the app's window (AUT iframe) to the runner's
-        // window where PercyDOM.serialize() executes. The preflight hook injects
-        // these WeakMaps on the app's window, but PercyDOM reads from `window.*`.
-        let appWin = doc.defaultView;
-        window.__percyClosedShadowRoots = (appWin && appWin.__percyClosedShadowRoots) || undefined;
-        window.__percyInternals = (appWin && appWin.__percyInternals) || undefined;
-
-        const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+        const domSnapshot = appWin.PercyDOM.serialize({ ...options, dom: doc });
         if (width !== null) domSnapshot.width = width;
 
         processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
