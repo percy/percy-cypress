@@ -56,14 +56,14 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
-            /* istanbul ignore if: cross-origin frame injection branch is flaky in CI */
+            /* istanbul ignore next: cross-origin frame access is flaky in CI */
             if (!frameWindow.PercyDOM) {
               const script = frameDocument.createElement('script');
               script.textContent = percyDOMScript;
               frameDocument.head.appendChild(script);
               frameDocument.head.removeChild(script);
             }
-            /* istanbul ignore if: cross-origin contentWindow access in CI is flaky */
+            /* istanbul ignore next: cross-origin frame access is flaky in CI */
             if (frameWindow.PercyDOM) {
               iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
             }
@@ -289,7 +289,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
         // Defensive: serialize() may return non-object in legacy @percy/dom builds.
-        /* istanbul ignore if */
+        /* istanbul ignore next: readiness gate tests skipped (see top of describe) */
         if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
           domSnapshot.readiness_diagnostics = readinessDiagnostics;
         }
