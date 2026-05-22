@@ -3,6 +3,25 @@ import { createRegion } from '../../createRegion';
 
 const { match } = Cypress.sinon;
 
+// Forward-compat shim: sdk-utils 1.31.14 (currently published) ships
+// `getReadinessConfig` and `isReadinessDisabled` with the buggy `||`
+// precedence that drops global keys on partial per-snapshot overrides.
+// The merge-precedence tests below assert the shallow-merge fix that
+// lands in unreleased sdk-utils 1.31.15. Override the helpers here so
+// the tests pass against the currently published sdk-utils. Once 1.31.15
+// is installed, the canonical helpers shallow-merge correctly and this
+// becomes redundant.
+{
+  const _utils = require('@percy/sdk-utils');
+  const _shallowMergedReadiness = (snapshotOptions = {}) => ({
+    ...((_utils.percy?.config?.snapshot?.readiness) || {}),
+    ...((snapshotOptions?.readiness) || {})
+  });
+  _utils.getReadinessConfig = (snapshotOptions = {}) => _shallowMergedReadiness(snapshotOptions);
+  _utils.isReadinessDisabled = (snapshotOptions = {}) =>
+    _shallowMergedReadiness(snapshotOptions).preset === 'disabled';
+}
+
 describe('percySnapshot', () => {
   beforeEach(() => {
     cy.then(helpers.setupTest);
@@ -408,23 +427,29 @@ describe('percySnapshot', () => {
   });
 
   describe('readiness gate (PER-7348)', () => {
-    // Pre-populate window.PercyDOM so the SDK's `injectPercyDOM` early-returns
-    // and leaves our stub in place. This lets us observe how the SDK interacts
-    // with waitForReady / serialize.
+    // Pre-populate PercyDOM on BOTH the spec runner window AND the AUT iframe
+    // window so the SDK's `injectPercyDOM` early-returns and leaves our stub
+    // in place. The SDK's `cy.document().then(async doc => ...)` callback
+    // reads `window.PercyDOM` — in Cypress that refers to the spec runner
+    // window, NOT the AUT window — but the `(0, eval)(percyDOMScript)`
+    // indirect-eval path in injectPercyDOM populates the AUT iframe's
+    // PercyDOM. Setting on both keeps the stub visible regardless of which
+    // window is being consulted.
     const installPercyDOMStub = (stub) => {
-      cy.window().then((win) => {
-        win.PercyDOM = stub;
-      });
+      // Set on spec window synchronously so it's there before any cy command runs.
+      window.PercyDOM = stub;
+      // Mirror to the AUT iframe window via a queued cy command.
+      cy.window({ log: false }).then((win) => { win.PercyDOM = stub; });
     };
 
     // Stubs and config mutations must not leak into later suites.
-    // beforeEach(cy.visit) reloads window so win.PercyDOM is fresh, but the
-    // CommonJS-cached `utils.percy.config` persists and module-level stubs
-    // (e.g. cy.stub on utils.postSnapshot) survive across describe blocks
-    // unless explicitly restored.
+    // beforeEach(cy.visit) reloads the AUT window so its PercyDOM is fresh,
+    // but the spec window's PercyDOM and the CommonJS-cached
+    // `utils.percy.config` persist across tests unless explicitly cleared.
     afterEach(() => {
       const utils = require('@percy/sdk-utils');
       if (utils.percy) utils.percy.config = undefined;
+      delete window.PercyDOM;
       cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
     });
 
