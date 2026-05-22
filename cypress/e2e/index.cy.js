@@ -417,6 +417,17 @@ describe('percySnapshot', () => {
       });
     };
 
+    // Stubs and config mutations must not leak into later suites.
+    // beforeEach(cy.visit) reloads window so win.PercyDOM is fresh, but the
+    // CommonJS-cached `utils.percy.config` persists and module-level stubs
+    // (e.g. cy.stub on utils.postSnapshot) survive across describe blocks
+    // unless explicitly restored.
+    afterEach(() => {
+      const utils = require('@percy/sdk-utils');
+      if (utils.percy) utils.percy.config = undefined;
+      cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
+    });
+
     it('calls waitForReady before serialize when the CLI exposes it', () => {
       const calls = [];
       installPercyDOMStub({
@@ -427,8 +438,7 @@ describe('percySnapshot', () => {
       cy.percySnapshot('readiness-happy-path');
 
       cy.then(() => {
-        // Tight ordering — `waitForReady` runs exactly once before serialize
-        // (loose indexOf checks pass for double-invocation regressions).
+        // deep.equal (not indexOf) so a duplicate waitForReady call would fail.
         expect(calls.map(([name]) => name)).to.deep.equal(['waitForReady', 'serialize']);
       });
     });

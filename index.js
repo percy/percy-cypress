@@ -252,29 +252,42 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
-        // Readiness gate (PER-7348). Backward-compat: older CLI bundles lack waitForReady.
-        // Config precedence (shallow merge of global + per-snapshot) lives in
-        // @percy/sdk-utils as `getReadinessConfig` / `isReadinessDisabled` —
-        // single source of truth shared across every JS SDK.
+        // Capture a stable PercyDOM reference: the page can reassign
+        // window.PercyDOM across the await below (e.g. on cy.reload in the
+        // responsive loop), so re-reading after the await is a footgun.
+        const PercyDOM = window.PercyDOM;
+
+        // Readiness gate (PER-7348). Backward-compat:
+        //   - Older CLI bundles lack PercyDOM.waitForReady — typeof guard handles that.
+        //   - Older @percy/sdk-utils lacks getReadinessConfig/isReadinessDisabled —
+        //     the typeof checks below fall back to local resolution so a stale
+        //     sdk-utils version never crashes snapshot capture.
         let readinessDiagnostics;
-        if (!utils.isReadinessDisabled(options) && typeof window.PercyDOM?.waitForReady === 'function') {
+        const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
+          ? utils.isReadinessDisabled(options)
+          : ((options?.readiness || utils.percy?.config?.snapshot?.readiness)?.preset === 'disabled');
+        const waitForReady = PercyDOM?.waitForReady;
+        if (!readinessDisabled && typeof waitForReady === 'function') {
+          const readinessConfig = typeof utils.getReadinessConfig === 'function'
+            ? utils.getReadinessConfig(options)
+            : { ...(utils.percy?.config?.snapshot?.readiness || {}), ...(options?.readiness || {}) };
           try {
-            readinessDiagnostics = await window.PercyDOM.waitForReady(utils.getReadinessConfig(options));
+            readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
           } catch (e) {
             log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
           }
         }
 
-        const domSnapshot = window.PercyDOM.serialize({ ...forwardOpts, dom: doc });
+        const domSnapshot = PercyDOM.serialize({ ...forwardOpts, dom: doc });
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
-        // Guard the shape — older/forked @percy/dom builds may return non-objects.
+        // Defensive: serialize() may return non-object in legacy @percy/dom builds.
         if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
           domSnapshot.readiness_diagnostics = readinessDiagnostics;
         }
         if (width !== null) domSnapshot.width = width;
 
-        processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
+        processCrossOriginIframes(doc, domSnapshot, forwardOpts, _percyDOMScript);
         _snapshots.push(domSnapshot);
       });
     }
