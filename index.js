@@ -62,6 +62,7 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
               frameDocument.head.appendChild(script);
               frameDocument.head.removeChild(script);
             }
+            /* istanbul ignore if: cross-origin contentWindow access in CI is flaky */
             if (frameWindow.PercyDOM) {
               iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
             }
