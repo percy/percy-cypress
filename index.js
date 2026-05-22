@@ -253,16 +253,13 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         injectPercyDOM(_percyDOMScript);
 
         // Readiness gate (PER-7348). Backward-compat: older CLI bundles lack waitForReady.
-        // Shallow-merge so per-snapshot keys override global ones without wiping them
-        // — `preset: disabled` set in .percy.yml is inherited by partial overrides.
+        // Config precedence (shallow merge of global + per-snapshot) lives in
+        // @percy/sdk-utils as `getReadinessConfig` / `isReadinessDisabled` —
+        // single source of truth shared across every JS SDK.
         let readinessDiagnostics;
-        const readinessConfig = {
-          ...(utils.percy?.config?.snapshot?.readiness || {}),
-          ...(options.readiness || {})
-        };
-        if (readinessConfig.preset !== 'disabled' && typeof window.PercyDOM?.waitForReady === 'function') {
+        if (!utils.isReadinessDisabled(options) && typeof window.PercyDOM?.waitForReady === 'function') {
           try {
-            readinessDiagnostics = await window.PercyDOM.waitForReady(readinessConfig);
+            readinessDiagnostics = await window.PercyDOM.waitForReady(utils.getReadinessConfig(options));
           } catch (e) {
             log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
           }
