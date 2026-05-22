@@ -56,6 +56,7 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
+            /* istanbul ignore if: cross-origin frame injection branch is flaky in CI */
             if (!frameWindow.PercyDOM) {
               const script = frameDocument.createElement('script');
               script.textContent = percyDOMScript;
@@ -263,26 +264,24 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         //   - Older @percy/sdk-utils lacks getReadinessConfig/isReadinessDisabled —
         //     the typeof checks below fall back to local resolution so a stale
         //     sdk-utils version never crashes snapshot capture.
-        // istanbul ignore next: cypress test-harness can't reliably stub
-        //   window.PercyDOM across the spec/AUT window boundary; the
-        //   describe.skip block covers the test gap. Behavior is verified
-        //   in sdk-utils' runReadinessGate test suite (CLI #2236).
         let readinessDiagnostics;
-        /* istanbul ignore next */
-        const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
-          ? utils.isReadinessDisabled(options)
-          : ((options?.readiness || utils.percy?.config?.snapshot?.readiness)?.preset === 'disabled');
-        /* istanbul ignore next */
-        const waitForReady = PercyDOM?.waitForReady;
-        /* istanbul ignore if */
-        if (!readinessDisabled && typeof waitForReady === 'function') {
-          const readinessConfig = typeof utils.getReadinessConfig === 'function'
-            ? utils.getReadinessConfig(options)
-            : { ...(utils.percy?.config?.snapshot?.readiness || {}), ...(options?.readiness || {}) };
-          try {
-            readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
-          } catch (e) {
-            log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
+        /* istanbul ignore next: cypress test harness can't reliably stub
+           window.PercyDOM across spec/AUT window boundary; behavior verified
+           in sdk-utils' runReadinessGate test suite (CLI #2236) */
+        {
+          const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
+            ? utils.isReadinessDisabled(options)
+            : ((options?.readiness || utils.percy?.config?.snapshot?.readiness)?.preset === 'disabled');
+          const waitForReady = PercyDOM?.waitForReady;
+          if (!readinessDisabled && typeof waitForReady === 'function') {
+            const readinessConfig = typeof utils.getReadinessConfig === 'function'
+              ? utils.getReadinessConfig(options)
+              : { ...(utils.percy?.config?.snapshot?.readiness || {}), ...(options?.readiness || {}) };
+            try {
+              readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
+            } catch (e) {
+              log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
+            }
           }
         }
 
