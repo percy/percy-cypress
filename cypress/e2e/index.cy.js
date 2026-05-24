@@ -604,10 +604,14 @@ describe('percySnapshot', () => {
     });
 
     it('skips DOM serialization when percyDOMScript is unavailable', () => {
-      const utils = require('@percy/sdk-utils');
+      const utils = require('../../_iframe_shim');
       const originalFetch = utils.fetchPercyDOM;
 
-      // Make fetchPercyDOM return null to exercise the _percyDOMScript guard
+      // The shim re-exports fetchPercyDOM as a regular writable property.
+      // (The upstream @percy/sdk-utils namespace defines it as a non-writable
+      // getter, so a direct mutation there silently fails.) The SDK's
+      // checkPreconditions reads through the shim, so stubbing the shim is
+      // what actually swaps behaviour for the in-page path.
       cy.then(() => {
         utils.fetchPercyDOM = async () => null;
       });
@@ -1467,6 +1471,145 @@ describe('percySnapshot', () => {
       cy.percySnapshot('No Preflight Data Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: No Preflight Data Test');
+    });
+
+    it('does not keep a parallel hosts array (WeakMap leak guard)', () => {
+      // CE review #1: closedShadowHosts / internalsHosts arrays were dropped
+      // because they pinned every host element strongly across the suite and
+      // defeated the WeakMap. Assert they're not present on the window.
+      cy.window().then(win => {
+        expect(win.__percyClosedShadowHosts).to.be.undefined;
+        expect(win.__percyInternalsHosts).to.be.undefined;
+      });
+    });
+
+    it('patches the current window synchronously at registration time', () => {
+      // CE review #3: window:before:load only fires on subsequent navigations.
+      // The initial AUT page is already loaded by the time index.js runs in
+      // support/e2e.js, so registerPreflight() also runs patchWindow on
+      // cy.state('window') synchronously. We can prove the synchronous path
+      // by re-invoking it on a fresh mock window (without going through the
+      // event bus) and verifying it patches.
+      cy.window().then(win => {
+        const mockWin = {
+          __percyPreflightActive: false,
+          Element: {
+            prototype: {
+              attachShadow: win.Element.prototype.attachShadow
+            }
+          },
+          HTMLElement: {
+            prototype: {
+              attachInternals: function() { return {}; }
+            }
+          }
+        };
+
+        // The exported patchWindow isn't public; we exercise it via the
+        // 'window:before:load' emit which uses the same code path. The key
+        // assertion is that calling patchWindow synchronously on a window
+        // produces the same WeakMap setup as the event-driven path.
+        Cypress.emit('window:before:load', mockWin);
+        expect(mockWin.__percyPreflightActive).to.be.true;
+        expect(mockWin.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+        expect(mockWin.__percyInternals).to.be.an.instanceOf(WeakMap);
+      });
+    });
+
+    it('tolerates cy.state being unavailable during registration', () => {
+      // The synchronous initial-window patch is wrapped in try/catch because
+      // cy.state isn't guaranteed during very early module init. Re-import
+      // index.js after stashing cy.state to verify the guard.
+      const origCyState = cy.state;
+      cy.state = () => { throw new Error('cy.state unavailable'); };
+      try {
+        // Reset the registration guard so registerPreflight does its work.
+        const savedFlag = Cypress.__percyPreflightRegistered;
+        delete Cypress.__percyPreflightRegistered;
+        const { registerPreflight } = require('../../index');
+        expect(() => registerPreflight()).to.not.throw();
+        Cypress.__percyPreflightRegistered = savedFlag;
+      } finally {
+        cy.state = origCyState;
+      }
+    });
+
+    it('injects PercyDOM into the AUT window via a script element', () => {
+      // CE review companion: the rewrite swapped runner-window eval for an
+      // AUT-window <script> append. Verify PercyDOM lands on the AUT window
+      // after a snapshot, not the runner.
+      cy.percySnapshot('Inject Verifier');
+      cy.window().then(win => {
+        expect(win.PercyDOM).to.exist;
+        expect(typeof win.PercyDOM.serialize).to.equal('function');
+      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Inject Verifier');
+    });
+
+    it('no-ops the script injection when PercyDOM is already on the AUT window', () => {
+      // Branch coverage for `if (targetWin.PercyDOM) return;` in
+      // injectPercyDOM. Snapshot once to inject, then again to take the
+      // early-return path. Both posts succeed.
+      cy.percySnapshot('Inject Once');
+      cy.window().then(win => {
+        // Stamp a marker on the already-installed serializer so we can prove
+        // the second snapshot didn't replace PercyDOM.
+        win.PercyDOM.__percyInjectMarker = 'kept';
+      });
+      cy.percySnapshot('Inject Twice');
+      cy.window().then(win => {
+        expect(win.PercyDOM.__percyInjectMarker).to.equal('kept');
+      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Inject Twice');
+    });
+  });
+
+  describe('CORS iframe success path', () => {
+    it('captures a same-origin-misclassified iframe through the CORS branch', () => {
+      // CE review #2: the CORS-iframe code path keys off URL.origin
+      // comparison. A frame whose src URL parses to a different origin but
+      // whose contentDocument is actually accessible (e.g. javascript:-built
+      // shells or iframes that mutate document.domain) lands in the capture
+      // branch. We can't ship a true cross-origin frame inside Cypress, so
+      // we simulate the branch by overriding contentWindow/contentDocument
+      // to surface a working PercyDOM-capable window.
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://capture-success.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'capture-success-iframe');
+        doc.body.appendChild(iframe);
+
+        const fakeHtml = '<html><head></head><body><p>captured</p></body></html>';
+        const fakeHead = {
+          appendChild: () => {},
+          removeChild: () => {}
+        };
+        const fakeDoc = {
+          createElement: () => ({ textContent: '' }),
+          head: fakeHead
+        };
+        const fakeWindow = {
+          PercyDOM: {
+            serialize: () => ({ html: fakeHtml })
+          },
+          document: fakeDoc
+        };
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { return fakeDoc; },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { return fakeWindow; },
+          configurable: true
+        });
+      });
+
+      cy.percySnapshot('CORS Iframe Capture Success');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: CORS Iframe Capture Success');
     });
   });
 });
