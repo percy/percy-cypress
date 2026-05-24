@@ -1,6 +1,6 @@
-// Local shim: extends @percy/sdk-utils with helpers the published 1.31.14-beta.3
-// does not yet export. SDK code expects these names; we provide them locally
-// until sdk-utils is updated.
+// Local shim: extends @percy/sdk-utils with helpers the published
+// 1.31.14-beta.4 does not yet export. SDK code expects these names; we
+// provide them locally until sdk-utils is updated.
 const utils = require('@percy/sdk-utils');
 
 const BROWSER_INTERNAL_PREFIXES = [
@@ -8,25 +8,24 @@ const BROWSER_INTERNAL_PREFIXES = [
   'edge:', 'opera:', 'view-source:', 'data:', 'javascript:', 'blob:'
 ];
 
-function resolveMaxFrameDepth(options = {}) {
-  const requested = options.maxFrameDepth ?? options.maxIframeDepth;
-  const def = utils.DEFAULT_MAX_IFRAME_DEPTH ?? 10;
-  const hard = utils.HARD_MAX_IFRAME_DEPTH ?? 25;
-  const value = requested == null ? def : Number(requested);
-  if (Number.isNaN(value)) return def;
-  return Math.max(0, Math.min(value, hard));
-}
-
-function resolveIgnoreSelectors(options = {}) {
-  const sel = options.ignoreIframeSelectors ?? options.ignoreSelectors;
+// Normalize a raw ignoreIframeSelectors value (array | string | unset) into
+// a clean string[] that PercyDOM and our own loop can both consume with
+// Array.prototype methods. PercyDOM internally does `selectors?.length &&
+// selectors.some(...)`, which crashes when the caller passes a string —
+// length is truthy but .some doesn't exist — so the normalization has to
+// run on the SDK side before we ever hand the value to serialize().
+function normalizeIgnoreSelectors(sel) {
   if (!sel) return [];
   if (Array.isArray(sel)) return sel.filter(s => typeof s === 'string' && s.length);
-  if (typeof sel === 'string') return sel ? [sel] : [];
+  // The last branch handles truthy non-string, non-array values (objects,
+  // numbers, booleans). No SDK code path produces those today, so istanbul
+  // is told to skip the `else` — but if a user threads garbage through
+  // ignoreIframeSelectors, we'd rather hand back [] than a value PercyDOM
+  // would crash on inside its own walk.
+  /* istanbul ignore else */
+  if (typeof sel === 'string') return [sel];
+  /* istanbul ignore next */
   return [];
-}
-
-function normalizeIgnoreSelectors(options = {}) {
-  return resolveIgnoreSelectors(options);
 }
 
 function isUnsupportedIframeSrc(src) {
@@ -36,8 +35,6 @@ function isUnsupportedIframeSrc(src) {
 }
 
 module.exports = Object.assign({}, utils, {
-  resolveMaxFrameDepth: utils.resolveMaxFrameDepth || resolveMaxFrameDepth,
-  resolveIgnoreSelectors: utils.resolveIgnoreSelectors || resolveIgnoreSelectors,
   normalizeIgnoreSelectors: utils.normalizeIgnoreSelectors || normalizeIgnoreSelectors,
   isUnsupportedIframeSrc: utils.isUnsupportedIframeSrc || isUnsupportedIframeSrc
 });

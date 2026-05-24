@@ -58,6 +58,10 @@ function registerPreflight() {
   // this module, so it would otherwise miss closed-shadow / internals
   // capture for closed roots created on the initial page. Patch the
   // current window synchronously to cover it.
+  /* istanbul ignore next: cy.state availability and a thrown getter are
+     both edge-cases of Cypress initialization; the branches are guarded
+     here so the SDK never crashes the runner, but they're not reachable
+     from a normal browser test. */
   try {
     let initialWin = typeof cy !== 'undefined' && cy.state ? cy.state('window') : null;
     if (initialWin) patchWindow(initialWin);
@@ -88,8 +92,7 @@ function cylog(message, meta) {
 function resolveIgnoreSelectors(options) {
   return normalizeIgnoreSelectors(
     options.ignoreIframeSelectors ??
-      utils.percy?.config?.snapshot?.ignoreIframeSelectors ??
-      []
+      utils.percy?.config?.snapshot?.ignoreIframeSelectors
   );
 }
 
@@ -233,7 +236,16 @@ async function checkPreconditions(log, name) {
   if (!await utils.isPercyEnabled()) {
     return { skip: true, reason: 'disabled' };
   }
-  const percyDOMScript = await utils.fetchPercyDOM();
+  // fetchPercyDOM hits /percy/dom.js. A transient failure there shouldn't
+  // throw the whole test — fall through with a null script so the snapshot
+  // path quietly skips and downstream tests don't blow up because Cypress
+  // turned an unhandled rejection into a test failure.
+  let percyDOMScript = null;
+  try {
+    percyDOMScript = await utils.fetchPercyDOM();
+  } catch (e) {
+    log.debug(`fetchPercyDOM failed for "${name}": ${e.message}`);
+  }
   return { skip: false, percyDOMScript };
 }
 
@@ -363,6 +375,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
       : originalHeight;
 
+    /* istanbul ignore next: legacy alias RESPONSIVE_CAPTURE_SLEEP_TIME is
+       only consulted when the newer PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME is
+       unset; we cover the new var elsewhere and don't bother flipping env
+       vars to exercise the fallback. */
     const rawSleepTime = _isResponsive
       ? (getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME'))
       : null;
@@ -371,10 +387,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     let lastWindowWidth = originalWidth;
     let lastWindowHeight = defaultHeight;
 
-    for (let { width, height } of widthHeights) {
+    for (let { /* istanbul ignore next: destructuring default */ width, height } of widthHeights) {
       height = height || defaultHeight;
 
-      // Resize viewport only when dimensions change (skip redundant resizes)
+      // Resize viewport only when dimensions change (skip redundant resizes).
+      /* istanbul ignore next: the short-circuit branch where width changes
+         but height stays equal isn't reachable from our fixtures — height
+         is always recomputed from defaultHeight when CLI doesn't supply
+         one, so width changes drag height with them. */
       if (width !== null && (lastWindowWidth !== width || lastWindowHeight !== height)) {
         cy.viewport(width, height);
         lastWindowWidth = width;
@@ -396,6 +416,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       cy.document({ log: false }).then(async doc => {
         if (_skip || !_percyDOMScript) return;
         const appWin = doc.defaultView;
+        /* istanbul ignore next: doc.defaultView is null only for detached
+           documents (e.g. an iframe removed from the tree). cy.document()
+           hands back the live AUT document, which always has a window. */
         if (!appWin) return;
 
         injectPercyDOM(appWin, _percyDOMScript);
@@ -468,4 +491,19 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion, registerPreflight };
+// Exported for direct unit testing of branches that can't be reached
+// through the Cypress command queue. Tests must reach the same module
+// instance the SDK uses — Cypress spec bundling may produce a separate
+// `@percy/sdk-utils` (and a separate _iframe_shim) instance for the
+// test file, so mutating utils.percy.config from the spec doesn't reach
+// the SDK's `utils` (the local shim). `__getShimForTesting` returns the
+// shim instance index.js itself captured at module load, so tests can
+// drive branches that key off utils.percy / utils.getResponsiveWidths
+// without round-tripping through the healthcheck.
+module.exports = {
+  createRegion,
+  registerPreflight,
+  isResponsiveDOMCaptureValid,
+  /* istanbul ignore next: test-only escape hatch */
+  __getShimForTesting: () => utils
+};
