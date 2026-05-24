@@ -11,47 +11,60 @@ const CY_TIMEOUT = 30 * 1000 * 1.5;
 // Inject Percy preflight script before every page load to intercept
 // closed shadow roots and ElementInternals. This runs before the page's
 // own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
+//
+// Storage: a WeakMap<host, ShadowRoot> per window. We deliberately do NOT
+// keep a parallel hosts[] array — that would hold strong refs to every host
+// element across the test lifetime and defeat the WeakMap, leaking detached
+// DOM nodes in long SPA suites. Consumers (@percy/dom serializer) reach the
+// closed roots via the live DOM tree: they walk every element on the page
+// and probe the WeakMap with the host as the key. No iteration over the map
+// itself is required, so we never need a strong-ref handle to hosts.
+function patchWindow(win) {
+  if (!win || win.__percyPreflightActive) return;
+  win.__percyPreflightActive = true;
+
+  // Intercept closed shadow roots.
+  let closedShadowRoots = new WeakMap();
+  let origAttachShadow = win.Element.prototype.attachShadow;
+  win.Element.prototype.attachShadow = function(init) {
+    let root = origAttachShadow.apply(this, arguments);
+    if (init && init.mode === 'closed') {
+      closedShadowRoots.set(this, root);
+    }
+    return root;
+  };
+  win.__percyClosedShadowRoots = closedShadowRoots;
+
+  // Intercept ElementInternals for :state() capture
+  if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
+    let internalsMap = new WeakMap();
+    let origAttachInternals = win.HTMLElement.prototype.attachInternals;
+    win.HTMLElement.prototype.attachInternals = function() {
+      let internals = origAttachInternals.apply(this, arguments);
+      internalsMap.set(this, internals);
+      return internals;
+    };
+    win.__percyInternals = internalsMap;
+  }
+}
+
 function registerPreflight() {
   if (Cypress.__percyPreflightRegistered) return false;
   Cypress.__percyPreflightRegistered = true;
-  Cypress.on('window:before:load', (win) => {
-    if (win.__percyPreflightActive) return;
-    win.__percyPreflightActive = true;
+  Cypress.on('window:before:load', patchWindow);
 
-    // Intercept closed shadow roots. WeakMap holds shadowRoot for lookup;
-    // a parallel hosts array lets us iterate them later (WeakMap isn't
-    // iterable). Hosts are held strongly while the page is alive — that's
-    // bounded by the lifetime of a single Cypress test run, so leak risk is
-    // negligible.
-    let closedShadowRoots = new WeakMap();
-    let closedShadowHosts = [];
-    let origAttachShadow = win.Element.prototype.attachShadow;
-    win.Element.prototype.attachShadow = function(init) {
-      let root = origAttachShadow.apply(this, arguments);
-      if (init && init.mode === 'closed') {
-        closedShadowRoots.set(this, root);
-        closedShadowHosts.push(this);
-      }
-      return root;
-    };
-    win.__percyClosedShadowRoots = closedShadowRoots;
-    win.__percyClosedShadowHosts = closedShadowHosts;
-
-    // Intercept ElementInternals for :state() capture
-    if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
-      let internalsMap = new WeakMap();
-      let internalsHosts = [];
-      let origAttachInternals = win.HTMLElement.prototype.attachInternals;
-      win.HTMLElement.prototype.attachInternals = function() {
-        let internals = origAttachInternals.apply(this, arguments);
-        internalsMap.set(this, internals);
-        internalsHosts.push(this);
-        return internals;
-      };
-      win.__percyInternals = internalsMap;
-      win.__percyInternalsHosts = internalsHosts;
-    }
-  });
+  // Cypress.on('window:before:load') only fires on subsequent navigations.
+  // The first AUT page is already loaded when `support/e2e.js` requires
+  // this module, so it would otherwise miss closed-shadow / internals
+  // capture for closed roots created on the initial page. Patch the
+  // current window synchronously to cover it.
+  try {
+    let initialWin = typeof cy !== 'undefined' && cy.state ? cy.state('window') : null;
+    if (initialWin) patchWindow(initialWin);
+  } catch (e) {
+    // cy.state may not be available during very early init — that's fine,
+    // window:before:load will handle the first real navigation.
+  }
   return true;
 }
 registerPreflight();
@@ -88,11 +101,20 @@ function resolveIgnoreSelectors(options) {
 // cross-origin frames). The null-snapshot filter then drops those entries
 // before they go on the wire.
 //
-// Nested cross-origin iframes (cross-origin within cross-origin) are an
-// inherent Cypress limitation: even if we walked into the parent JS-side, the
-// browser would block reading the grandchild's content the same way. Users
-// who need that should reach for percy-playwright or percy-puppeteer where
-// the framework can address frames out-of-process.
+// Capture works ONLY when the browser does not block contentDocument access
+// — typically same-origin-misclassified frames (e.g. about: trickery, or
+// frames that share a registrable domain after document.domain manipulation).
+// True cross-origin frames (different origin in the strict sense) cannot be
+// captured from Cypress; the contentDocument access throws SecurityError and
+// the entry is dropped. Supporting those would require a postMessage bridge
+// with a listener injected into the frame at preflight time, which the
+// Cypress harness cannot guarantee for third-party frames. Users who need
+// full CORS frame capture should reach for percy-playwright or percy-
+// puppeteer where the framework can address frames out-of-process.
+//
+// Nested cross-origin iframes (cross-origin within cross-origin) share the
+// same limitation: even if we walked into the parent JS-side, the browser
+// would block reading the grandchild's content the same way.
 function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
   const ignoreSelectors = resolveIgnoreSelectors(options);
@@ -139,10 +161,21 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
 
       let iframeSnapshot = null;
       try {
+        // contentWindow / contentDocument property access itself throws
+        // SecurityError on true cross-origin frames (Blink throws on the
+        // getter, not on a downstream property read). Wrap both accesses so
+        // we degrade to iframeSnapshot=null and let the post-filter drop the
+        // entry — instead of bubbling the throw and losing every same-origin
+        // frame after it in the same loop iteration.
         const frameWindow = iframe.contentWindow;
         const frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
-        if (frameDocument) {
+        if (frameDocument && frameWindow) {
           if (!frameWindow.PercyDOM) {
+            // Inject PercyDOM into the frame so its serialize() runs with
+            // the frame's own Element/Document prototypes. Done as a <script>
+            // element so the script executes in the frame's global scope —
+            // calling frameWindow.eval() would still evaluate in the runner
+            // global on most browsers.
             const script = frameDocument.createElement('script');
             script.textContent = percyDOMScript;
             frameDocument.head.appendChild(script);
@@ -367,7 +400,17 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(appWin, _percyDOMScript);
 
-        const domSnapshot = appWin.PercyDOM.serialize({ ...options, dom: doc });
+        // Normalize ignoreIframeSelectors before handing it to PercyDOM.
+        // @percy/dom does `selectors.length && selectors.some(...)`, which
+        // crashes when the caller passes a string (string has .length but
+        // not .some). Our local shim already normalizes for the SDK-side
+        // iframe walk; do it once more for PercyDOM's own walk.
+        const serializeOpts = {
+          ...options,
+          ignoreIframeSelectors: resolveIgnoreSelectors(options),
+          dom: doc
+        };
+        const domSnapshot = appWin.PercyDOM.serialize(serializeOpts);
         if (width !== null) domSnapshot.width = width;
 
         processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
