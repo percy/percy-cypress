@@ -604,6 +604,22 @@ describe('percySnapshot', () => {
       });
     });
 
+    it('still serializes when waitForReady rejects with a non-Error value', () => {
+      // Exercises the `|| e` fallback in `e?.message || e` -- a plain-string
+      // (or anything without `.message`) rejection.
+      const calls = [];
+      installPercyDOMStub({
+        waitForReady: () => { calls.push(['waitForReady']); return Promise.reject('plain-string-rejection'); },
+        serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
+      });
+
+      cy.percySnapshot('readiness-rejection-string');
+
+      cy.then(() => {
+        expect(calls.map(([name]) => name)).to.deep.equal(['waitForReady', 'serialize']);
+      });
+    });
+
     it('attaches readiness diagnostics returned by waitForReady to domSnapshot', () => {
       const diagnostics = { passed: true, timed_out: false, preset: 'balanced', total_duration_ms: 42, checks: {} };
       let capturedSnapshot;
