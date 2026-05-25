@@ -265,9 +265,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         //     the typeof checks below fall back to local resolution so a stale
         //     sdk-utils version never crashes snapshot capture.
         let readinessDiagnostics;
-        /* istanbul ignore next: cypress test harness can't reliably stub
-           window.PercyDOM across spec/AUT window boundary; behavior verified
-           in sdk-utils' runReadinessGate test suite (CLI #2236) */
         {
           const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
             ? utils.isReadinessDisabled(options)
@@ -289,7 +286,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
         // Defensive: serialize() may return non-object in legacy @percy/dom builds.
-        /* istanbul ignore next: readiness gate tests skipped (see top of describe) */
         if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
           domSnapshot.readiness_diagnostics = readinessDiagnostics;
         }

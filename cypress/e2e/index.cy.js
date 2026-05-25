@@ -407,33 +407,22 @@ describe('percySnapshot', () => {
     });
   });
 
-  // TODO: re-enable once we have a reliable way to stub
-  // window.PercyDOM that's visible to the SDK's `cy.document().then(async
-  // doc => ...)` callback. The stub-on-AUT-window pattern (cy.window().then
-  // (win => win.PercyDOM = stub)) targets a different window than the SDK
-  // reads — the SDK reads from the spec runner window. Setting on both
-  // also broke unrelated tests. The SDK behavior itself is verified by
-  // the sdk-utils tests (runReadinessGate has end-to-end coverage there);
-  // the gap here is only test-harness ergonomics.
-  describe.skip('readiness gate', () => {
-    // Pre-populate window.PercyDOM so the SDK's `injectPercyDOM` early-returns
-    // and leaves our stub in place. This lets us observe how the SDK interacts
-    // with waitForReady / serialize.
+  describe('readiness gate', () => {
+    // The SDK's percySnapshot command reads `window.PercyDOM` from the spec
+    // runner window (where the SDK module was eval'd). cy.window() returns
+    // the AUT window -- stubbing there is invisible to the SDK. Set the
+    // stub on the spec runner window via cy.then so it executes inside
+    // Cypress's command chain but stays in the same global as the SDK.
     const installPercyDOMStub = (stub) => {
-      cy.window().then((win) => {
-        win.PercyDOM = stub;
+      cy.then(() => {
+        window.PercyDOM = stub;
       });
     };
 
-    // Stubs and config mutations must not leak into later suites.
-    // beforeEach(cy.visit) reloads window so win.PercyDOM is fresh, but the
-    // CommonJS-cached `utils.percy.config` persists and module-level stubs
-    // (e.g. cy.stub on utils.postSnapshot) survive across describe blocks
-    // unless explicitly restored.
     afterEach(() => {
       const utils = require('@percy/sdk-utils');
       if (utils.percy) utils.percy.config = undefined;
-      cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
+      cy.then(() => { delete window.PercyDOM; });
     });
 
     it('calls waitForReady before serialize when the CLI exposes it', () => {
