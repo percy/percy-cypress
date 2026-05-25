@@ -259,26 +259,19 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         // responsive loop), so re-reading after the await is a footgun.
         const PercyDOM = window.PercyDOM;
 
-        // Readiness gate. Backward-compat:
-        //   - Older CLI bundles lack PercyDOM.waitForReady — typeof guard handles that.
-        //   - Older @percy/sdk-utils lacks getReadinessConfig/isReadinessDisabled —
-        //     the typeof checks below fall back to local resolution so a stale
-        //     sdk-utils version never crashes snapshot capture.
+        // Readiness gate. The package.json floor pins @percy/sdk-utils to
+        // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
+        // always present. Older CLI bundles may still lack
+        // PercyDOM.waitForReady — that typeof guard remains the backward-
+        // compat path on the @percy/dom side.
         let readinessDiagnostics;
-        {
-          const readinessDisabled = typeof utils.isReadinessDisabled === 'function'
-            ? utils.isReadinessDisabled(options)
-            : ((options?.readiness || utils.percy?.config?.snapshot?.readiness)?.preset === 'disabled');
-          const waitForReady = PercyDOM?.waitForReady;
-          if (!readinessDisabled && typeof waitForReady === 'function') {
-            const readinessConfig = typeof utils.getReadinessConfig === 'function'
-              ? utils.getReadinessConfig(options)
-              : { ...(utils.percy?.config?.snapshot?.readiness || {}), ...(options?.readiness || {}) };
-            try {
-              readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
-            } catch (e) {
-              log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
-            }
+        const waitForReady = PercyDOM?.waitForReady;
+        if (!utils.isReadinessDisabled(options) && typeof waitForReady === 'function') {
+          const readinessConfig = utils.getReadinessConfig(options);
+          try {
+            readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
+          } catch (e) {
+            log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
           }
         }
 
