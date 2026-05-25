@@ -609,6 +609,7 @@ describe('percySnapshot', () => {
       // (or anything without `.message`) rejection.
       const calls = [];
       installPercyDOMStub({
+        // eslint-disable-next-line prefer-promise-reject-errors
         waitForReady: () => { calls.push(['waitForReady']); return Promise.reject('plain-string-rejection'); },
         serialize: (opts) => { calls.push(['serialize', opts]); return { html: { html: '<html></html>' } }; }
       });
