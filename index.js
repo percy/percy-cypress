@@ -259,7 +259,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         // responsive loop), so re-reading after the await is a footgun.
         const PercyDOM = window.PercyDOM;
 
-        // Readiness gate (PER-7348). Backward-compat:
+        // Readiness gate. Backward-compat:
         //   - Older CLI bundles lack PercyDOM.waitForReady — typeof guard handles that.
         //   - Older @percy/sdk-utils lacks getReadinessConfig/isReadinessDisabled —
         //     the typeof checks below fall back to local resolution so a stale
