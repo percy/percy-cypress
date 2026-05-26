@@ -56,12 +56,14 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
           const frameWindow = iframe.contentWindow;
           const frameDocument = iframe.contentDocument || frameWindow?.document;
           if (frameDocument) {
+            /* istanbul ignore next: cross-origin frame access is flaky in CI */
             if (!frameWindow.PercyDOM) {
               const script = frameDocument.createElement('script');
               script.textContent = percyDOMScript;
               frameDocument.head.appendChild(script);
               frameDocument.head.removeChild(script);
             }
+            /* istanbul ignore next: cross-origin frame access is flaky in CI */
             if (frameWindow.PercyDOM) {
               iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
             }
@@ -129,6 +131,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     name = undefined;
   }
   name = name || cy.state('runnable').fullTitle();
+
+  // `readiness` is consumed locally by the SDK; the CLI already gets it from
+  // .percy.yml healthcheck. Strip it so it doesn't leak into serialize() args
+  // or round-trip back through postSnapshot.
+  const { readiness: _readiness, ...forwardOpts } = options;
 
   const meta = { snapshot: { name, testCase: options.testCase } };
 
@@ -247,10 +254,37 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
         injectPercyDOM(_percyDOMScript);
 
-        const domSnapshot = window.PercyDOM.serialize({ ...options, dom: doc });
+        // Capture a stable PercyDOM reference: the page can reassign
+        // window.PercyDOM across the await below (e.g. on cy.reload in the
+        // responsive loop), so re-reading after the await is a footgun.
+        const PercyDOM = window.PercyDOM;
+
+        // Readiness gate. The package.json floor pins @percy/sdk-utils to
+        // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
+        // always present. Older CLI bundles may still lack
+        // PercyDOM.waitForReady — that typeof guard remains the backward-
+        // compat path on the @percy/dom side.
+        let readinessDiagnostics;
+        const waitForReady = PercyDOM?.waitForReady;
+        if (!utils.isReadinessDisabled(options) && typeof waitForReady === 'function') {
+          const readinessConfig = utils.getReadinessConfig(options);
+          try {
+            readinessDiagnostics = await waitForReady.call(PercyDOM, readinessConfig);
+          } catch (e) {
+            log.debug(`waitForReady failed, proceeding to serialize: ${e?.message || e}`);
+          }
+        }
+
+        const domSnapshot = PercyDOM.serialize({ ...forwardOpts, dom: doc });
+
+        // Attach readiness diagnostics so the CLI can log timing and pass/fail.
+        // Defensive: serialize() may return non-object in legacy @percy/dom builds.
+        if (readinessDiagnostics && typeof domSnapshot === 'object' && domSnapshot !== null) {
+          domSnapshot.readiness_diagnostics = readinessDiagnostics;
+        }
         if (width !== null) domSnapshot.width = width;
 
-        processCrossOriginIframes(doc, domSnapshot, options, _percyDOMScript);
+        processCrossOriginIframes(doc, domSnapshot, forwardOpts, _percyDOMScript);
         _snapshots.push(domSnapshot);
       });
     }
@@ -284,7 +318,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         try {
           let response = await withRetry(async () => await withLog(async () => {
             return await utils.postSnapshot({
-              ...options,
+              ...forwardOpts,
               environmentInfo: ENV_INFO,
               clientInfo: CLIENT_INFO,
               domSnapshot,
