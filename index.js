@@ -209,7 +209,74 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     if (_skip) return;
 
     // Use CLI-provided width/height pairs when available, fallback to raw widths
-    let widthHeights;
+    let widths = _widthHeights && _widthHeights.length ? _widthHeights.map(wh => wh.width || wh) : (options.widths || []);
+    if (!widths.length) widths = [Cypress.config('viewportWidth')];
+
+    // For responsive, we need to capture at each width
+    // If reload is needed, we'll reload the page at each width
+    // Otherwise, we just change viewport and capture
+    if (_isResponsive && needsReload) {
+      // Will be handled in subsequent steps via cy commands
+    }
+  });
+
+  // Step 3: Actually change viewport and capture snapshots
+  cy.then(() => {
+    if (_skip) return;
+
+    const doCapture = (width, height) => {
+      cy.viewport(width, height || Cypress.config('viewportHeight'));
+      if (needsReload) {
+        cy.reload();
+      }
+      cy.then({ timeout: CY_TIMEOUT }, async () => {
+        injectPercyDOM(_percyDOMScript);
+        const domSnapshot = await utils.domSnapshot(document, options);
+        processCrossOriginIframes(document, domSnapshot, options, _percyDOMScript);
+        _snapshots.push(domSnapshot);
+      });
+    };
+
+    if (_isResponsive) {
+      const widths = _widthHeights && _widthHeights.length ? _widthHeights : (options.widths || [Cypress.config('viewportWidth')]);
+      widths.forEach(wh => {
+        const w = wh.width || wh;
+        const h = wh.height || Cypress.config('viewportHeight');
+        doCapture(w, h);
+      });
+    } else {
+      doCapture(Cypress.config('viewportWidth'), Cypress.config('viewportHeight'));
+    }
+  });
+
+  // Step 4: Post snapshots
+  cy.then({ timeout: CY_TIMEOUT }, async () => {
+    if (_skip) return;
+
+    const loggable = cylog;
+    loggable('Snapshot taken', { name, snapshots: _snapshots.length });
+
+    await withLog(async () => {
+      const snapshot = {
+        name,
+        domSnapshots: _snapshots,
+        clientInfo: CLIENT_INFO,
+        environmentInfo: ENV_INFO,
+        ...forwardOpts
+      };
+
+      await withRetry(async () => {
+        const response = await utils.postSnapshot(snapshot);
+        if (response && response.errors) {
+          throw new Error(response.errors.map(e => e.message).join(', '));
+        }
+      });
+
+      // Restore viewport
+      cy.viewport(originalWidth, originalHeight);
+    }, 'posting snapshot', false);
+  });
+});thHeights;
     if (_isResponsive) {
       widthHeights = _widthHeights || (options.widths || [originalWidth]).map(w => ({ width: w }));
     } else {
