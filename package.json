@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@cypress/code-coverage": "^3.14.7",
-    "@percy/cli": "^1.31.10",
+    "@percy/cli": "1.31.14",
     "babel-loader": "^10.0.0",
     "babel-plugin-istanbul": "^7.0.1",
     "cypress": "^15.10.0",
@@ -51,5 +51,6 @@
     "nyc": "^17.1.0",
     "tsd": "^0.33.0",
     "webpack": "^5.102.1"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

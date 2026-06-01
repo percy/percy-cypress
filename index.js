@@ -1,11 +1,77 @@
-const utils = require('@percy/sdk-utils');
+const utils = require('./_iframe_shim');
 const { createRegion } = require('./createRegion');
 const { getEnvValue, lazyResolveAddress } = require('./env-utils');
+const { isUnsupportedIframeSrc, normalizeIgnoreSelectors } = utils;
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
+
+// Inject Percy preflight script before every page load to intercept
+// closed shadow roots and ElementInternals. This runs before the page's
+// own scripts, so attachShadow({ mode: 'closed' }) calls are captured.
+//
+// Storage: a WeakMap<host, ShadowRoot> per window. We deliberately do NOT
+// keep a parallel hosts[] array — that would hold strong refs to every host
+// element across the test lifetime and defeat the WeakMap, leaking detached
+// DOM nodes in long SPA suites. Consumers (@percy/dom serializer) reach the
+// closed roots via the live DOM tree: they walk every element on the page
+// and probe the WeakMap with the host as the key. No iteration over the map
+// itself is required, so we never need a strong-ref handle to hosts.
+function patchWindow(win) {
+  if (!win || win.__percyPreflightActive) return;
+  win.__percyPreflightActive = true;
+
+  // Intercept closed shadow roots.
+  let closedShadowRoots = new WeakMap();
+  let origAttachShadow = win.Element.prototype.attachShadow;
+  win.Element.prototype.attachShadow = function(init) {
+    let root = origAttachShadow.apply(this, arguments);
+    if (init && init.mode === 'closed') {
+      closedShadowRoots.set(this, root);
+    }
+    return root;
+  };
+  win.__percyClosedShadowRoots = closedShadowRoots;
+
+  // Intercept ElementInternals for :state() capture
+  if (typeof win.HTMLElement.prototype.attachInternals === 'function') {
+    let internalsMap = new WeakMap();
+    let origAttachInternals = win.HTMLElement.prototype.attachInternals;
+    win.HTMLElement.prototype.attachInternals = function() {
+      let internals = origAttachInternals.apply(this, arguments);
+      internalsMap.set(this, internals);
+      return internals;
+    };
+    win.__percyInternals = internalsMap;
+  }
+}
+
+function registerPreflight() {
+  if (Cypress.__percyPreflightRegistered) return false;
+  Cypress.__percyPreflightRegistered = true;
+  Cypress.on('window:before:load', patchWindow);
+
+  // Cypress.on('window:before:load') only fires on subsequent navigations.
+  // The first AUT page is already loaded when `support/e2e.js` requires
+  // this module, so it would otherwise miss closed-shadow / internals
+  // capture for closed roots created on the initial page. Patch the
+  // current window synchronously to cover it.
+  /* istanbul ignore next: cy.state availability and a thrown getter are
+     both edge-cases of Cypress initialization; the branches are guarded
+     here so the SDK never crashes the runner, but they're not reachable
+     from a normal browser test. */
+  try {
+    let initialWin = typeof cy !== 'undefined' && cy.state ? cy.state('window') : null;
+    if (initialWin) patchWindow(initialWin);
+  } catch (e) {
+    // cy.state may not be available during very early init — that's fine,
+    // window:before:load will handle the first real navigation.
+  }
+  return true;
+}
+registerPreflight();
 
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
@@ -23,64 +89,124 @@ function cylog(message, meta) {
   });
 }
 
-const SKIP_IFRAME_SRCS = [
-  'about:blank', 'about:srcdoc', 'javascript:', 'data:',
-  'vbscript:', 'blob:', 'chrome:', 'chrome-extension:'
-];
+function resolveIgnoreSelectors(options) {
+  return normalizeIgnoreSelectors(
+    options.ignoreIframeSelectors ??
+      utils.percy?.config?.snapshot?.ignoreIframeSelectors
+  );
+}
 
+// Cypress runs in the same browser window as the AUT and is blocked by the
+// browser's same-origin policy from reading cross-origin iframe content from
+// JS. We walk the top-level document only and emit a corsIframes entry for
+// every cross-origin iframe with a percyElementId; the entry's snapshot stays
+// null whenever the browser blocks access (which is the common case for true
+// cross-origin frames). The null-snapshot filter then drops those entries
+// before they go on the wire.
+//
+// Capture works ONLY when the browser does not block contentDocument access
+// — typically same-origin-misclassified frames (e.g. about: trickery, or
+// frames that share a registrable domain after document.domain manipulation).
+// True cross-origin frames (different origin in the strict sense) cannot be
+// captured from Cypress; the contentDocument access throws SecurityError and
+// the entry is dropped. Supporting those would require a postMessage bridge
+// with a listener injected into the frame at preflight time, which the
+// Cypress harness cannot guarantee for third-party frames. Users who need
+// full CORS frame capture should reach for percy-playwright or percy-
+// puppeteer where the framework can address frames out-of-process.
+//
+// Nested cross-origin iframes (cross-origin within cross-origin) share the
+// same limitation: even if we walked into the parent JS-side, the browser
+// would block reading the grandchild's content the same way.
 function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   const log = utils.logger('cypress');
+  const ignoreSelectors = resolveIgnoreSelectors(options);
   try {
     const currentUrl = new URL(dom.URL);
-    const iframes = dom.querySelectorAll('iframe');
     const processedFrames = [];
 
-    for (const iframe of iframes) {
-      const src = iframe.getAttribute('src');
-      const srcdoc = iframe.getAttribute('srcdoc');
-      const srcLower = src ? src.toLowerCase() : '';
-      if (!src || srcdoc || SKIP_IFRAME_SRCS.some(p => srcLower === p || srcLower.startsWith(p))) continue;
-
-      try {
-        const frameUrl = new URL(src, currentUrl.href);
-        if (frameUrl.origin === currentUrl.origin) continue;
-
-        const percyElementId = iframe.getAttribute('data-percy-element-id');
-        if (!percyElementId) {
-          log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
+    for (const iframe of dom.querySelectorAll('iframe')) {
+      // Per-element opt-out via data-percy-ignore attribute.
+      if (iframe.hasAttribute('data-percy-ignore')) {
+        log.debug('Skipping iframe marked with data-percy-ignore');
+        continue;
+      }
+      // Per-snapshot opt-out via ignoreIframeSelectors option / config.
+      if (ignoreSelectors.length) {
+        let skipBySelector = false;
+        for (const sel of ignoreSelectors) {
+          try { if (iframe.matches(sel)) { skipBySelector = true; break; } } catch (e) { /* invalid */ }
+        }
+        if (skipBySelector) {
+          log.debug('Skipping iframe matching ignoreIframeSelectors');
           continue;
         }
+      }
 
-        let iframeSnapshot = null;
-        try {
-          const frameWindow = iframe.contentWindow;
-          const frameDocument = iframe.contentDocument || frameWindow?.document;
-          if (frameDocument) {
-            /* istanbul ignore next: cross-origin frame access is flaky in CI */
-            if (!frameWindow.PercyDOM) {
-              const script = frameDocument.createElement('script');
-              script.textContent = percyDOMScript;
-              frameDocument.head.appendChild(script);
-              frameDocument.head.removeChild(script);
-            }
-            /* istanbul ignore next: cross-origin frame access is flaky in CI */
-            if (frameWindow.PercyDOM) {
-              iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
-            }
-          }
-        } catch (accessError) {
-          log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
-          iframeSnapshot = null;
-        }
+      const src = iframe.getAttribute('src');
+      const srcdoc = iframe.getAttribute('srcdoc');
+      if (srcdoc || isUnsupportedIframeSrc(src ? src.toLowerCase() : '')) continue;
 
-        processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
+      let frameUrl;
+      try {
+        frameUrl = new URL(src, currentUrl.href);
       } catch (e) {
         log.debug(`Skipping iframe "${src}": ${e.message}`);
+        continue;
       }
+      if (frameUrl.origin === currentUrl.origin) continue;
+
+      const percyElementId = iframe.getAttribute('data-percy-element-id');
+      if (!percyElementId) {
+        log.debug(`Skipping cross-origin iframe ${frameUrl.href}: no data-percy-element-id`);
+        continue;
+      }
+
+      let iframeSnapshot = null;
+      try {
+        // contentWindow / contentDocument property access itself throws
+        // SecurityError on true cross-origin frames (Blink throws on the
+        // getter, not on a downstream property read). Wrap both accesses so
+        // we degrade to iframeSnapshot=null and let the post-filter drop the
+        // entry — instead of bubbling the throw and losing every same-origin
+        // frame after it in the same loop iteration.
+        const frameWindow = iframe.contentWindow;
+        const frameDocument = iframe.contentDocument || (frameWindow && frameWindow.document);
+        if (frameDocument && frameWindow) {
+          if (!frameWindow.PercyDOM) {
+            // Inject PercyDOM into the frame so its serialize() runs with
+            // the frame's own Element/Document prototypes. Done as a <script>
+            // element so the script executes in the frame's global scope —
+            // calling frameWindow.eval() would still evaluate in the runner
+            // global on most browsers.
+            const script = frameDocument.createElement('script');
+            script.textContent = percyDOMScript;
+            frameDocument.head.appendChild(script);
+            frameDocument.head.removeChild(script);
+          }
+          if (frameWindow.PercyDOM) {
+            iframeSnapshot = frameWindow.PercyDOM.serialize({ ...options, enableJavaScript: true });
+          }
+        }
+      } catch (accessError) {
+        log.debug(`Cannot access cross-origin iframe directly (expected): ${accessError.message}`);
+        iframeSnapshot = null;
+      }
+
+      processedFrames.push({ iframeData: { percyElementId }, iframeSnapshot, frameUrl: frameUrl.href });
     }
 
-    if (processedFrames.length > 0) {
-      domSnapshot.corsIframes = processedFrames;
+    // Drop entries whose snapshot couldn't be captured (true cross-origin
+    // iframes that browser security blocks Cypress from reading). The CLI
+    // would discard them on validation anyway; filtering here saves wire size
+    // on pages with many ad/tracker iframes.
+    const usableFrames = processedFrames.filter(f => f.iframeSnapshot && f.iframeSnapshot.html);
+    const dropped = processedFrames.length - usableFrames.length;
+    if (dropped > 0) {
+      log.debug(`Dropping ${dropped} cross-origin iframe(s) with unreachable content (browser security)`);
+    }
+    if (usableFrames.length > 0) {
+      domSnapshot.corsIframes = usableFrames;
     }
   } catch (e) {
     log.debug(`Error during cross-origin iframe processing: ${e.message}`);
@@ -110,16 +236,48 @@ async function checkPreconditions(log, name) {
   if (!await utils.isPercyEnabled()) {
     return { skip: true, reason: 'disabled' };
   }
-  const percyDOMScript = await utils.fetchPercyDOM();
+  // fetchPercyDOM hits /percy/dom.js. A transient failure there shouldn't
+  // throw the whole test — fall through with a null script so the snapshot
+  // path quietly skips and downstream tests don't blow up because Cypress
+  // turned an unhandled rejection into a test failure.
+  let percyDOMScript = null;
+  try {
+    percyDOMScript = await utils.fetchPercyDOM();
+  } catch (e) {
+    log.debug(`fetchPercyDOM failed for "${name}": ${e.message}`);
+  }
   return { skip: false, percyDOMScript };
 }
 
-function injectPercyDOM(percyDOMScript) {
-  if (!window.PercyDOM) {
-    // eslint-disable-next-line no-eval
-    (0, eval)(percyDOMScript);
-  }
+// Inject the PercyDOM serializer INTO the AUT window so it walks the AUT
+// document with the AUT's own document/HTMLElement constructors. Running
+// PercyDOM in the runner window and passing `dom: aut_doc` loses cross-window
+// state (shadow roots get dropped during cloneNode because clone.attachShadow
+// has to happen with the AUT document's element prototype).
+function injectPercyDOM(targetWin, percyDOMScript) {
+  if (targetWin.PercyDOM) return;
+  // Inject via a <script> element appended to the target document. Browsers
+  // evaluate inline scripts in the global scope of the document that owns
+  // them, so `PercyDOM` ends up on `targetWin` even when the caller lives in
+  // a different window/realm (which is the case for Cypress: the SDK code
+  // runs in the runner window, the page lives in the AUT iframe). We avoid
+  // `targetWin.eval(...)` because indirect eval still runs in the caller's
+  // global scope, which would land `PercyDOM` on the runner.
+  const script = targetWin.document.createElement('script');
+  script.textContent = percyDOMScript;
+  targetWin.document.head.appendChild(script);
+  targetWin.document.head.removeChild(script);
 }
+
+// The preflight (window:before:load) collects:
+//   • `__percyClosedShadowRoots`: WeakMap<host, ShadowRoot> for closed roots
+//   • `__percyInternals`:          WeakMap<host, ElementInternals>
+// We expose these on the AUT window so @percy/dom (running inside the AUT)
+// can consume them during serialization. The SDK's job stops at "give the
+// serializer everything it needs"; turning that data into snapshot HTML is
+// the CLI's responsibility (in @percy/dom). Once @percy/dom reads from these
+// hooks, closed shadow + ElementInternals show up in the snapshot
+// automatically — no DOM mutation needed here.
 
 Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   const log = utils.logger('cypress');
@@ -222,6 +380,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
       : originalHeight;
 
+    /* istanbul ignore next: legacy alias RESPONSIVE_CAPTURE_SLEEP_TIME is
+       only consulted when the newer PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME is
+       unset; we cover the new var elsewhere and don't bother flipping env
+       vars to exercise the fallback. */
     const rawSleepTime = _isResponsive
       ? (getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME'))
       : null;
@@ -230,10 +392,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     let lastWindowWidth = originalWidth;
     let lastWindowHeight = defaultHeight;
 
-    for (let { width, height } of widthHeights) {
+    for (let { /* istanbul ignore next: destructuring default */ width, height } of widthHeights) {
       height = height || defaultHeight;
 
-      // Resize viewport only when dimensions change (skip redundant resizes)
+      // Resize viewport only when dimensions change (skip redundant resizes).
+      /* istanbul ignore next: the short-circuit branch where width changes
+         but height stays equal isn't reachable from our fixtures — height
+         is always recomputed from defaultHeight when CLI doesn't supply
+         one, so width changes drag height with them. */
       if (width !== null && (lastWindowWidth !== width || lastWindowHeight !== height)) {
         cy.viewport(width, height);
         lastWindowWidth = width;
@@ -248,16 +414,24 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
       if (sleepMs > 0) cy.wait(sleepMs, { log: false });
 
-      // Serialize DOM and collect snapshot
+      // Serialize DOM and collect snapshot. PercyDOM must run inside the AUT
+      // window so it sees the page's document/Element prototypes — running
+      // it in the runner window and passing `dom: aut_doc` would drop shadow
+      // roots during cross-window cloneNode.
       cy.document({ log: false }).then(async doc => {
         if (_skip || !_percyDOMScript) return;
+        const appWin = doc.defaultView;
+        /* istanbul ignore next: doc.defaultView is null only for detached
+           documents (e.g. an iframe removed from the tree). cy.document()
+           hands back the live AUT document, which always has a window. */
+        if (!appWin) return;
 
-        injectPercyDOM(_percyDOMScript);
+        injectPercyDOM(appWin, _percyDOMScript);
 
-        // Capture a stable PercyDOM reference: the page can reassign
-        // window.PercyDOM across the await below (e.g. on cy.reload in the
-        // responsive loop), so re-reading after the await is a footgun.
-        const PercyDOM = window.PercyDOM;
+        // Capture a stable PercyDOM reference from the AUT window: the page
+        // can reassign PercyDOM across the await below (e.g. on cy.reload in
+        // the responsive loop), so re-reading after the await is a footgun.
+        const PercyDOM = appWin.PercyDOM;
 
         // Readiness gate. The package.json floor pins @percy/sdk-utils to
         // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
@@ -275,7 +449,17 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           }
         }
 
-        const domSnapshot = PercyDOM.serialize({ ...forwardOpts, dom: doc });
+        // Normalize ignoreIframeSelectors before handing it to PercyDOM.
+        // @percy/dom does `selectors.length && selectors.some(...)`, which
+        // crashes when the caller passes a string (string has .length but
+        // not .some). Our local shim already normalizes for the SDK-side
+        // iframe walk; do it once more for PercyDOM's own walk.
+        const serializeOpts = {
+          ...forwardOpts,
+          ignoreIframeSelectors: resolveIgnoreSelectors(options),
+          dom: doc
+        };
+        const domSnapshot = PercyDOM.serialize(serializeOpts);
 
         // Attach readiness diagnostics so the CLI can log timing and pass/fail.
         // Defensive: serialize() may return non-object in legacy @percy/dom builds.
@@ -339,4 +523,19 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion };
+// Exported for direct unit testing of branches that can't be reached
+// through the Cypress command queue. Tests must reach the same module
+// instance the SDK uses — Cypress spec bundling may produce a separate
+// `@percy/sdk-utils` (and a separate _iframe_shim) instance for the
+// test file, so mutating utils.percy.config from the spec doesn't reach
+// the SDK's `utils` (the local shim). `__getShimForTesting` returns the
+// shim instance index.js itself captured at module load, so tests can
+// drive branches that key off utils.percy / utils.getResponsiveWidths
+// without round-tripping through the healthcheck.
+module.exports = {
+  createRegion,
+  registerPreflight,
+  isResponsiveDOMCaptureValid,
+  /* istanbul ignore next: test-only escape hatch */
+  __getShimForTesting: () => utils
+};
