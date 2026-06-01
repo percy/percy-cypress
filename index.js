@@ -114,10 +114,10 @@ async function checkPreconditions(log, name) {
   return { skip: false, percyDOMScript };
 }
 
-function injectPercyDOM(percyDOMScript) {
-  if (!window.PercyDOM) {
+function injectPercyDOM(win, percyDOMScript) {
+  if (!win.PercyDOM) {
     // eslint-disable-next-line no-eval
-    (0, eval)(percyDOMScript);
+    win.eval(percyDOMScript);
   }
 }
 
@@ -252,12 +252,20 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       cy.document({ log: false }).then(async doc => {
         if (_skip || !_percyDOMScript) return;
 
-        injectPercyDOM(_percyDOMScript);
+        // Inject + run PercyDOM in the app-under-test realm (doc.defaultView),
+        // NOT the Cypress spec/runner frame. waitForReady takes no document
+        // argument and queries the ambient `document`;
+        // injecting via spec-realm eval made every readiness check observe the
+        // runner frame instead of the app (readySelectors timed out, the other
+        // checks silently no-op'd). serialize was unaffected only because it's
+        // passed `dom: doc` explicitly.
+        const win = doc.defaultView;
+        injectPercyDOM(win, _percyDOMScript);
 
         // Capture a stable PercyDOM reference: the page can reassign
-        // window.PercyDOM across the await below (e.g. on cy.reload in the
+        // win.PercyDOM across the await below (e.g. on cy.reload in the
         // responsive loop), so re-reading after the await is a footgun.
-        const PercyDOM = window.PercyDOM;
+        const PercyDOM = win.PercyDOM;
 
         // Readiness gate. The package.json floor pins @percy/sdk-utils to
         // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
