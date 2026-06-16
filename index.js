@@ -296,7 +296,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         }
         if (width !== null) domSnapshot.width = width;
 
-        processCrossOriginIframes(doc, domSnapshot, forwardOpts, _percyDOMScript);
+        processCrossOriginIframes(doc, domSnapshot, mergedOptions, _percyDOMScript);
         _snapshots.push(domSnapshot);
       });
     }
