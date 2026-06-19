@@ -426,6 +426,13 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
            hands back the live AUT document, which always has a window. */
         if (!appWin) return;
 
+        // Inject + run PercyDOM in the app-under-test realm (appWin =
+        // doc.defaultView), NOT the Cypress spec/runner frame. waitForReady
+        // takes no document argument and queries the ambient `document`;
+        // injecting via spec-realm eval made every readiness check observe the
+        // runner frame instead of the app (readySelectors timed out, the other
+        // checks silently no-op'd). serialize was unaffected only because it's
+        // passed `dom: doc` explicitly.
         injectPercyDOM(appWin, _percyDOMScript);
 
         // Capture a stable PercyDOM reference from the AUT window: the page

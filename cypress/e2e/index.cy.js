@@ -408,21 +408,21 @@ describe('percySnapshot', () => {
   });
 
   describe('readiness gate', () => {
-    // The SDK's percySnapshot command reads `window.PercyDOM` from the spec
-    // runner window (where the SDK module was eval'd). cy.window() returns
-    // the AUT window -- stubbing there is invisible to the SDK. Set the
-    // stub on the spec runner window via cy.then so it executes inside
-    // Cypress's command chain but stays in the same global as the SDK.
+    // The SDK injects + runs PercyDOM in the app-under-test realm
+    // (doc.defaultView), so stub PercyDOM on the AUT window via cy.window().
+    // (It previously read window.PercyDOM from the spec runner frame, which
+    // silently ran the readiness gate against the wrong document; stubbing on
+    // the AUT window matches the fix and guards that regression.)
     const installPercyDOMStub = (stub) => {
-      cy.then(() => {
-        window.PercyDOM = stub;
+      cy.window({ log: false }).then((win) => {
+        win.PercyDOM = stub;
       });
     };
 
     afterEach(() => {
       const utils = require('@percy/sdk-utils');
       if (utils.percy) utils.percy.config = undefined;
-      cy.then(() => { delete window.PercyDOM; });
+      cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
     });
 
     it('calls waitForReady before serialize when the CLI exposes it', () => {
