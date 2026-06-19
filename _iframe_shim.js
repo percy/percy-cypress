@@ -34,7 +34,16 @@ function isUnsupportedIframeSrc(src) {
   return BROWSER_INTERNAL_PREFIXES.some(p => s.startsWith(p));
 }
 
-module.exports = Object.assign({}, utils, {
-  normalizeIgnoreSelectors: utils.normalizeIgnoreSelectors || normalizeIgnoreSelectors,
-  isUnsupportedIframeSrc: utils.isUnsupportedIframeSrc || isUnsupportedIframeSrc
-});
+// Augment the real @percy/sdk-utils singleton IN PLACE and re-export it,
+// rather than `Object.assign({}, utils, …)`. A fresh copy snapshots
+// `utils.percy` at load time and gives index.js a different object than the
+// `@percy/sdk-utils` instance the rest of the world (CLI, and crucially the
+// Cypress spec) reads and mutates — so a test setting `utils.percy.config`
+// would never reach the SDK, and `getReadinessConfig`/`isReadinessDisabled`
+// invoked as `utils.<fn>()` would see the stale copy's `this.percy`. Adding
+// only the missing helpers keeps a single shared instance, matching the
+// direct `require('@percy/sdk-utils')` master uses.
+if (!utils.normalizeIgnoreSelectors) utils.normalizeIgnoreSelectors = normalizeIgnoreSelectors;
+if (!utils.isUnsupportedIframeSrc) utils.isUnsupportedIframeSrc = isUnsupportedIframeSrc;
+
+module.exports = utils;
