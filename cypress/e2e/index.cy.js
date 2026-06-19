@@ -1349,12 +1349,19 @@ describe('percySnapshot', () => {
         iframe.setAttribute('data-percy-element-id', 'config-merge-iframe');
         doc.body.appendChild(iframe);
 
-        const realWindow = iframe.contentWindow;
-        if (realWindow) {
-          realWindow.PercyDOM = {
+        // A real cross-origin iframe's contentWindow/contentDocument are
+        // inaccessible (and unstubbable) in the browser, so the production code
+        // never reaches the iframe's PercyDOM.serialize. Stub both to
+        // controllable fakes so we can capture the options serialize receives.
+        const fakeDoc = { head: { appendChild() {}, removeChild() {} }, createElement: () => ({}) };
+        const fakeWindow = {
+          document: fakeDoc,
+          PercyDOM: {
             serialize: function(opts) { capturedOpts = opts; return { html: '<html></html>' }; }
-          };
-        }
+          }
+        };
+        Object.defineProperty(iframe, 'contentWindow', { configurable: true, get: () => fakeWindow });
+        Object.defineProperty(iframe, 'contentDocument', { configurable: true, get: () => fakeDoc });
       });
 
       cy.percySnapshot('Iframe Config Merge');
