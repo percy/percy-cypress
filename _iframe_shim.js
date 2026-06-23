@@ -5,7 +5,9 @@ const utils = require('@percy/sdk-utils');
 
 const BROWSER_INTERNAL_PREFIXES = [
   'about:', 'chrome:', 'chrome-extension:', 'devtools:',
-  'edge:', 'opera:', 'view-source:', 'data:', 'javascript:', 'blob:'
+  'edge:', 'opera:', 'view-source:', 'data:', 'javascript:', 'blob:',
+  // legacy IE-era schemes that still appear on adversarial pages
+  'vbscript:', 'file:'
 ];
 
 // Normalize a raw ignoreIframeSelectors value (array | string | unset) into
