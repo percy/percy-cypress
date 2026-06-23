@@ -365,4 +365,4 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   });
 });
 
-module.exports = { createRegion };
+module.exports = { createRegion, filterSensitiveCookies };
