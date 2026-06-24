@@ -440,6 +440,21 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         // the responsive loop), so re-reading after the await is a footgun.
         const PercyDOM = appWin.PercyDOM;
 
+        // injectPercyDOM appends an inline <script> to run the serializer in
+        // the AUT realm. On an AUT served with a strict Content-Security-Policy
+        // (no 'unsafe-inline' for script-src) the browser blocks that inline
+        // script, so it never executes and PercyDOM stays undefined. Calling
+        // PercyDOM.serialize() here would throw OUTSIDE any withLog/try guard
+        // and fail the whole test. Degrade gracefully instead: log a warning
+        // and skip this snapshot, matching the other disabled/skip paths.
+        if (!PercyDOM || typeof PercyDOM.serialize !== 'function') {
+          log.warn(`Percy is unable to inject its DOM serializer into the page for "${name}" ` +
+            '(this usually means a strict Content-Security-Policy blocked the inline script). ' +
+            'Skipping snapshot.');
+          cylog('Snapshot skipped: DOM serializer unavailable (possible CSP restriction)', { name });
+          return;
+        }
+
         // Readiness gate. The package.json floor pins @percy/sdk-utils to
         // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
         // always present. Older CLI bundles may still lack
