@@ -1882,6 +1882,25 @@ describe('percySnapshot', () => {
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Inject Twice');
     });
+
+    it('skips the snapshot gracefully when PercyDOM never loads (e.g. CSP-blocked injection)', () => {
+      // Branch coverage for the CSP guard: a strict-CSP AUT still delivers the
+      // inline serializer <script> (so _percyDOMScript is truthy) but the
+      // browser blocks it from executing, leaving PercyDOM undefined. The
+      // snapshot must be skipped — not throw and fail the whole test.
+      const utils = require('@percy/sdk-utils');
+      cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
+      // Non-empty script that does NOT define window.PercyDOM — mimics the
+      // blocked inline script having been delivered but never executed.
+      cy.stub(utils, 'fetchPercyDOM').resolves('window.__percyCspBlockedMarker = true;');
+
+      // Must not throw / fail the test.
+      cy.percySnapshot('csp-blocked-skip');
+
+      // Snapshot was skipped, never posted.
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: csp-blocked-skip');
+    });
   });
 
   describe('CORS iframe success path', () => {
