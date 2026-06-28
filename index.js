@@ -1,4 +1,5 @@
-const utils = require('./_iframe_shim');
+// Canonical iframe-capture helpers, single source of truth (percy/cli #2319).
+const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
 const { getEnvValue, lazyResolveAddress } = require('./env-utils');
 const { isUnsupportedIframeSrc, normalizeIgnoreSelectors } = utils;
@@ -548,10 +549,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 // Exported for direct unit testing of branches that can't be reached
 // through the Cypress command queue. Tests must reach the same module
 // instance the SDK uses — Cypress spec bundling may produce a separate
-// `@percy/sdk-utils` (and a separate _iframe_shim) instance for the
-// test file, so mutating utils.percy.config from the spec doesn't reach
-// the SDK's `utils` (the local shim). `__getShimForTesting` returns the
-// shim instance index.js itself captured at module load, so tests can
+// `@percy/sdk-utils` instance for the test file, so mutating
+// utils.percy.config from the spec doesn't reach the SDK's `utils`.
+// `__getShimForTesting` returns the `@percy/sdk-utils` instance index.js
+// itself captured at module load, so tests can
 // drive branches that key off utils.percy / utils.getResponsiveWidths
 // without round-tripping through the healthcheck.
 module.exports = {

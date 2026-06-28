@@ -776,15 +776,15 @@ describe('percySnapshot', () => {
       // instance. We bridge by calling isResponsiveDOMCaptureValid
       // directly and asserting the warn fires + return value is false.
       const indexExports = require('../../');
-      const shim = require('../../_iframe_shim');
+      const shim = require('@percy/sdk-utils');
 
       const originalConfig = shim.percy.config;
 
       cy.then(() => {
         // Reach the shim instance that index.js *actually* uses by going
         // through index.js's exports — webpack treats each separately
-        // required path as a unique module, so `require('_iframe_shim')`
-        // from this file does NOT alias the shim instance that index.js
+        // required path as a unique module, so `require('@percy/sdk-utils')`
+        // from this file does NOT alias the instance that index.js
         // captured at module-load time. The index.js module IS the same
         // instance the SDK uses (since support/e2e.js imports it), so we
         // route through it.
@@ -936,9 +936,9 @@ describe('percySnapshot', () => {
 
     it('logs and falls back when getResponsiveWidths throws', () => {
       // Cover the catch in Step 1 of percySnapshot: getResponsiveWidths can
-      // reject if the CLI is older than 1.31.10. We reach the same shim
+      // reject if the CLI is older than 1.31.10. We reach the same
       // instance index.js captured (webpack spec/SDK isolation means
-      // require('_iframe_shim') from this file is a separate instance),
+      // require('@percy/sdk-utils') from this file is a separate instance),
       // and we intercept the SDK-side logger to capture the debug log —
       // helpers.logger mocks a different logger module instance.
       const indexExports = require('../../');
