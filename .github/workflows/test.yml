@@ -44,7 +44,10 @@ jobs:
           yarn
           yarn build
           yarn global:link
-          cd "$GITHUB_WORKSPACE"
-          yarn remove @percy/cli && yarn link `echo $PERCY_PACKAGES`
-          npx percy --version
+          echo "$(yarn global bin)" >> "$GITHUB_PATH"
+          export PATH="$(yarn global bin):$PATH"
+          cd ${{ github.workspace }}
+          yarn remove @percy/cli >/dev/null 2>&1 || true
+          yarn link `echo $PERCY_PACKAGES` >/dev/null 2>&1 || true
+          percy --version
       - run: yarn test:coverage
