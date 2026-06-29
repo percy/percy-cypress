@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Percy Standard Snapshot Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f8fafc; }
+
+    .hero {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      padding: 60px 40px;
+      text-align: center;
+    }
+
+    .hero h1 { font-size: 36px; margin-bottom: 12px; }
+    .hero p { font-size: 18px; opacity: 0.9; }
+
+    .content {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    .feature {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .feature-icon { font-size: 32px; margin-bottom: 12px; }
+    .feature h3 { font-size: 16px; color: #1e293b; margin-bottom: 8px; }
+    .feature p { font-size: 14px; color: #64748b; line-height: 1.6; }
+
+    .cta {
+      text-align: center;
+      margin: 40px 0;
+      padding: 40px;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: #6366f1;
+      color: white;
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Percy Visual Testing</h1>
+    <p>Automated visual regression testing for your web apps</p>
+  </div>
+
+  <div class="content">
+    <div class="feature-list">
+      <div class="feature">
+        <div class="feature-icon">📸</div>
+        <h3>Snapshot Capture</h3>
+        <p>Capture DOM snapshots at any point in your test suite with a single line of code.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔍</div>
+        <h3>Visual Diff</h3>
+        <p>Pixel-level comparison with intelligent diff detection that ignores anti-aliasing.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📱</div>
+        <h3>Responsive Testing</h3>
+        <p>Test across multiple viewport widths to catch responsive layout regressions.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔄</div>
+        <h3>CI Integration</h3>
+        <p>Seamless integration with GitHub, GitLab, and Bitbucket pull request workflows.</p>
+      </div>
+    </div>
+
+    <div class="cta">
+      <h2>Start Visual Testing</h2>
+      <p>Add Percy to your existing test suite in minutes.</p>
+      <a href="#" class="cta-button">Get Started</a>
+    </div>
+  </div>
+</body>
+</html>

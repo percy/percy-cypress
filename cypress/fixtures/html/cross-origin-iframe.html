@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Percy Cross-Origin Iframe Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f8fafc; }
+
+    .header {
+      background: #1e293b;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .header h1 { font-size: 24px; }
+    .header p { font-size: 14px; color: #94a3b8; margin-top: 4px; }
+
+    .content {
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 24px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .iframe-container {
+      margin: 16px 0;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .iframe-label {
+      background: #e2e8f0;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      font-family: monospace;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      border: none;
+    }
+
+    .same-origin-frame {
+      border-color: #86efac;
+    }
+    .same-origin-frame .iframe-label {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .cross-origin-frame {
+      border-color: #fca5a5;
+    }
+    .cross-origin-frame .iframe-label {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      font-size: 14px;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Cross-Origin Iframe Test</h1>
+    <p>Percy should detect and process cross-origin iframes in this page</p>
+  </div>
+
+  <div class="content">
+    <div class="info-box">
+      This page contains both same-origin and cross-origin iframes. Percy's cross-origin iframe
+      processing should detect the cross-origin ones, read their <code>data-percy-element-id</code>,
+      and attempt to serialize their content.
+    </div>
+
+    <div class="section-title">Cross-Origin Iframes</div>
+
+    <div class="iframe-container cross-origin-frame">
+      <div class="iframe-label">CROSS-ORIGIN: https://example.com (external site)</div>
+      <iframe src="https://example.com" height="200" title="Cross-origin example.com"></iframe>
+    </div>
+
+    <div class="iframe-container cross-origin-frame">
+      <div class="iframe-label">CROSS-ORIGIN: https://www.wikipedia.org (external site)</div>
+      <iframe src="https://www.wikipedia.org" height="300" title="Cross-origin wikipedia"></iframe>
+    </div>
+
+    <div class="section-title">Same-Origin Iframe</div>
+
+    <div class="iframe-container same-origin-frame">
+      <div class="iframe-label">SAME-ORIGIN: /standard-snapshot.html (local fixture)</div>
+      <iframe src="/standard-snapshot.html" height="400" title="Same-origin fixture"></iframe>
+    </div>
+
+    <div class="section-title">Iframes That Should Be Skipped</div>
+
+    <div class="iframe-container">
+      <div class="iframe-label">SKIP: about:blank</div>
+      <iframe src="about:blank" height="50" title="about:blank iframe"></iframe>
+    </div>
+
+    <div class="iframe-container">
+      <div class="iframe-label">SKIP: srcdoc (inline content)</div>
+      <iframe srcdoc="<p style='padding:10px;font-family:sans-serif;color:#666;'>Inline srcdoc content — should be captured in parent DOM</p>" height="50" title="srcdoc iframe"></iframe>
+    </div>
+
+    <div class="iframe-container">
+      <div class="iframe-label">SKIP: data: URL</div>
+      <iframe src="data:text/html,<p style='padding:10px;font-family:sans-serif;color:#666;'>Data URL content</p>" height="50" title="data URL iframe"></iframe>
+    </div>
+  </div>
+</body>
+</html>

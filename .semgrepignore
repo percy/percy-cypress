@@ -1,0 +1,11 @@
+# Node modules
+node_modules/
+
+# Test fixtures (HTML files with inline scripts)
+cypress/fixtures/
+
+# Build output
+dist/
+
+# Local-only test fixture server (not production code)
+cypress/support/serve-fixtures.js

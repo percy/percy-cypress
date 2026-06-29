@@ -33,19 +33,17 @@ jobs:
       - run: yarn
       - name: Set up @percy/cli from git
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          CLI_BRANCH: ${{ github.event.inputs.branch }}
         run: |
           cd /tmp
-          git clone --branch ${{ github.event.inputs.branch }} --depth 1 https://github.com/percy/cli
+          git clone --branch "$CLI_BRANCH" --depth 1 https://github.com/percy/cli
           cd cli
           PERCY_PACKAGES=`find packages -mindepth 1 -maxdepth 1 -type d | sed -e 's/packages/@percy/g' | tr '\n' ' '`
           git log -1
           yarn
           yarn build
           yarn global:link
-          # Expose the freshly built `percy` on PATH. yarn link symlinks the
-          # package but not its bin, so `npx percy` would miss it and download
-          # the unrelated public `percy`. Link is best-effort (non-JS repos have
-          # no node project to link into); PATH is what makes percy resolvable.
           echo "$(yarn global bin)" >> "$GITHUB_PATH"
           export PATH="$(yarn global bin):$PATH"
           cd ${{ github.workspace }}
