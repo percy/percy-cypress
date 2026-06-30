@@ -498,10 +498,10 @@
     "@percy/sdk-utils" "1.31.14"
     systeminformation "^5.25.11"
 
-"@percy/sdk-utils@1.31.14", "@percy/sdk-utils@1.32.3-beta.1":
-  version "1.32.3-beta.1"
-  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.32.3-beta.1.tgz#7ae9b9c61d4a0bbaeb240dd4abfffb9d905a99cf"
-  integrity sha512-/oD+82slu1tuV3nFkwrdBWUIZ3JdmPuh2ajlcWbumTxu0lu2hhZLKmCTE72Fc5N6UXoHl9tQzJPrkT0/W/aigQ==
+"@percy/sdk-utils@1.31.14", "@percy/sdk-utils@1.32.3-beta.3":
+  version "1.32.3-beta.3"
+  resolved "https://registry.yarnpkg.com/@percy/sdk-utils/-/sdk-utils-1.32.3-beta.3.tgz#28848ae0be1c749964eeb08fe0c6dbf196cec52b"
+  integrity sha512-QJtndql2/lSGVU1bUaMHsVon3EXvJHRK2ztux1ZH3VPWi0DWrQPHiWrgXAeldkW22/WQqzgwz/gj7HCKJazlaQ==
   dependencies:
     pac-proxy-agent "^7.0.2"
 
