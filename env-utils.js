@@ -5,6 +5,31 @@
 
 const utils = require('@percy/sdk-utils');
 
+// The Percy CLI server always runs locally, so its address must resolve to a
+// loopback host. Validating this prevents an attacker-controlled
+// PERCY_SERVER_ADDRESS (or a rogue co-located process advertising a remote
+// address) from redirecting snapshot payloads — which can carry cookies and
+// serialized DOM — to an external host (CWE-284 / SSRF).
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+const isLoopbackAddress = (address) => {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(address).hostname.toLowerCase());
+  } catch (e) {
+    return false;
+  }
+};
+
+// Return the address only if it points at loopback; otherwise warn (when a
+// logger is available) and return undefined so callers fall back to the
+// default http://localhost:5338.
+const sanitizeAddress = (address, log) => {
+  if (!address) return undefined;
+  if (isLoopbackAddress(address)) return address;
+  if (log) log.warn(`Ignoring non-loopback PERCY_SERVER_ADDRESS "${address}"; the Percy CLI must run on localhost.`);
+  return undefined;
+};
+
 // Read environment values using Cypress.expose() (Cypress 15.10+) with Cypress.env() fallback.
 // Tries Cypress.expose() first, then Cypress.env() (wrapped in try/catch for allowCypressEnv: false).
 const getEnvValue = (key) => {
@@ -25,7 +50,7 @@ const getEnvValue = (key) => {
 function lazyResolveAddress(log) {
   if (!utils.percy.address) {
     try {
-      const addr = Cypress.env('PERCY_SERVER_ADDRESS');
+      const addr = sanitizeAddress(Cypress.env('PERCY_SERVER_ADDRESS'), log);
       if (addr) utils.percy.address = addr;
     } catch (e) {
       log.debug('Could not resolve Percy CLI address from environment variables', e);
@@ -33,4 +58,4 @@ function lazyResolveAddress(log) {
   }
 }
 
-module.exports = { getEnvValue, lazyResolveAddress };
+module.exports = { getEnvValue, lazyResolveAddress, sanitizeAddress, isLoopbackAddress };

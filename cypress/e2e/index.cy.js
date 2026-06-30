@@ -215,6 +215,104 @@ describe('percySnapshot', () => {
         utils.percy.address = savedAddress;
       });
     });
+
+    it('isLoopbackAddress() accepts loopback hosts and rejects others', () => {
+      const { isLoopbackAddress } = envUtils();
+
+      expect(isLoopbackAddress('http://localhost:5338')).to.be.true;
+      expect(isLoopbackAddress('http://127.0.0.1:5338')).to.be.true;
+      expect(isLoopbackAddress('http://[::1]:5338')).to.be.true;
+      expect(isLoopbackAddress('https://LOCALHOST:5338')).to.be.true;
+
+      expect(isLoopbackAddress('http://evil.example.com:5338')).to.be.false;
+      expect(isLoopbackAddress('http://10.0.0.5:5338')).to.be.false;
+    });
+
+    it('isLoopbackAddress() returns false for an unparseable address', () => {
+      const { isLoopbackAddress } = envUtils();
+
+      // `new URL()` throws on a non-URL string, exercising the catch block.
+      expect(isLoopbackAddress('not a url')).to.be.false;
+      expect(isLoopbackAddress('')).to.be.false;
+    });
+
+    it('sanitizeAddress() returns loopback addresses unchanged', () => {
+      const { sanitizeAddress } = envUtils();
+
+      expect(sanitizeAddress('http://localhost:5338')).to.equal('http://localhost:5338');
+      expect(sanitizeAddress('http://127.0.0.1:5338')).to.equal('http://127.0.0.1:5338');
+    });
+
+    it('sanitizeAddress() returns undefined for a falsy address', () => {
+      const { sanitizeAddress } = envUtils();
+
+      expect(sanitizeAddress(undefined)).to.be.undefined;
+      expect(sanitizeAddress('')).to.be.undefined;
+    });
+
+    it('sanitizeAddress() drops a non-loopback address and warns when a logger is given', () => {
+      const { sanitizeAddress } = envUtils();
+      const warn = cy.stub();
+
+      const result = sanitizeAddress('http://evil.example.com:5338', { warn });
+
+      expect(result).to.be.undefined;
+      expect(warn).to.be.calledWithMatch('Ignoring non-loopback PERCY_SERVER_ADDRESS');
+    });
+
+    it('sanitizeAddress() drops a non-loopback address silently when no logger is given', () => {
+      const { sanitizeAddress } = envUtils();
+
+      expect(sanitizeAddress('http://evil.example.com:5338')).to.be.undefined;
+    });
+
+    it('lazyResolveAddress() sets the address when Cypress.env() returns a loopback address', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        let capturedSet = null;
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { capturedSet = v; },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://localhost:5338');
+
+        lazyResolveAddress(log);
+        // The address is loopback, so sanitizeAddress returns it and it is assigned.
+        expect(capturedSet).to.equal('http://localhost:5338');
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
+
+    it('lazyResolveAddress() does not set the address when Cypress.env() returns a non-loopback address', () => {
+      const { lazyResolveAddress } = envUtils();
+      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+
+      cy.wrap(null).then(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
+        let capturedSet = null;
+        Object.defineProperty(utils.percy, 'address', {
+          get: () => null,
+          set: (v) => { capturedSet = v; },
+          configurable: true
+        });
+
+        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://evil.example.com:5338');
+
+        lazyResolveAddress(log);
+        // sanitizeAddress rejects the non-loopback address, so nothing is assigned.
+        expect(capturedSet).to.be.null;
+
+        Object.defineProperty(utils.percy, 'address', descriptor);
+      });
+    });
   });
 
   it('disables snapshots when the healthcheck fails', () => {
@@ -1473,6 +1571,83 @@ describe('percySnapshot', () => {
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: All HttpOnly Test');
+    });
+  });
+
+  describe('filterSensitiveCookies', () => {
+    // Required lazily (like envUtils above) so importing index.js does not
+    // re-run its module-level side effects at spec load time.
+    const filterSensitiveCookies = (...args) => require('../..').filterSensitiveCookies(...args);
+
+    it('strips cookies whose names match the sensitive pattern', () => {
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'auth_token', value: 'a' },
+        { name: 'XSRF-TOKEN', value: 'x' },
+        { name: 'theme', value: 'dark' },
+        { name: 'locale', value: 'en' }
+      ];
+
+      const result = filterSensitiveCookies(cookies);
+
+      expect(result.map(c => c.name)).to.deep.equal(['theme', 'locale']);
+    });
+
+    it('keeps a cookie with no name (falls back to empty string)', () => {
+      const cookies = [
+        { value: 'no-name' },
+        { name: 'session', value: 's' }
+      ];
+
+      const result = filterSensitiveCookies(cookies);
+
+      // The nameless cookie is not sensitive, so it is retained; `session` is stripped.
+      expect(result).to.have.length(1);
+      expect(result[0].value).to.equal('no-name');
+    });
+
+    it('returns the input unchanged when it is not an array', () => {
+      expect(filterSensitiveCookies(undefined)).to.be.undefined;
+      expect(filterSensitiveCookies(null)).to.be.null;
+    });
+
+    it('forwards all cookies when percyForwardAllCookies is true', () => {
+      const ogConfig = Cypress.config;
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'theme', value: 'dark' }
+      ];
+
+      try {
+        Cypress.config = (key) => (key === 'percyForwardAllCookies' ? true : ogConfig(key));
+        const result = filterSensitiveCookies(cookies);
+        // forwardAll short-circuits, so even the sensitive cookie is returned.
+        expect(result).to.equal(cookies);
+      } finally {
+        Cypress.config = ogConfig;
+      }
+    });
+
+    it('defaults to stripping when reading the config throws', () => {
+      const ogConfig = Cypress.config;
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'theme', value: 'dark' }
+      ];
+
+      try {
+        // Only throw for the cookie config key so Cypress's own internal
+        // Cypress.config(...) reads are unaffected.
+        Cypress.config = (key) => {
+          if (key === 'percyForwardAllCookies') throw new Error('config unavailable');
+          return ogConfig(key);
+        };
+        const result = filterSensitiveCookies(cookies);
+        // The catch leaves forwardAll false, so sensitive cookies are still stripped.
+        expect(result.map(c => c.name)).to.deep.equal(['theme']);
+      } finally {
+        Cypress.config = ogConfig;
+      }
     });
   });
 });
