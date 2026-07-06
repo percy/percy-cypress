@@ -1,13 +1,13 @@
 const utils = require('@percy/sdk-utils');
 const { createRegion } = require('./createRegion');
-const { getEnvValue, lazyResolveAddress, sanitizeAddress } = require('./env-utils');
+const { getEnvValue, lazyResolveAddress } = require('./env-utils');
 
 const sdkPkg = require('./package.json');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `cypress/${Cypress.version}`;
 const CY_TIMEOUT = 30 * 1000 * 1.5;
 
-utils.percy.address = sanitizeAddress(getEnvValue('PERCY_SERVER_ADDRESS'));
+utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
 // Cookie names that commonly hold session/auth secrets. These are stripped from
 // snapshot payloads by default so credentials don't leave the tester's trust
