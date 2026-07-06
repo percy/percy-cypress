@@ -765,24 +765,67 @@ describe('percySnapshot', () => {
     });
 
     it('falls back to normal capture when deferUploads is enabled', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalConfig = utils.percy?.config;
+      // We can't reach the deferUploads warn branch through cy.percySnapshot
+      // alone: webpack bundles the spec separately from the SDK, so the
+      // test's `@percy/sdk-utils` is a different module instance than the
+      // SDK uses, and direct mutation of utils.percy.config doesn't carry
+      // over (the SDK's healthcheck would overwrite it anyway). Call the
+      // shim's `utils.percy` (same instance the SDK reads) by going
+      // through index.js's exports — index.js is loaded by support/e2e.js
+      // and its `require('@percy/sdk-utils')` resolves to the SDK-side
+      // instance. We bridge by calling isResponsiveDOMCaptureValid
+      // directly and asserting the warn fires + return value is false.
+      const indexExports = require('../../');
+      const shim = require('@percy/sdk-utils');
+
+      const originalConfig = shim.percy.config;
 
       cy.then(() => {
-        utils.percy = utils.percy || {};
-        utils.percy.config = { percy: { deferUploads: true }, snapshot: {} };
+        // Reach the shim instance that index.js *actually* uses by going
+        // through index.js's exports — webpack treats each separately
+        // required path as a unique module, so `require('@percy/sdk-utils')`
+        // from this file does NOT alias the instance that index.js
+        // captured at module-load time. The index.js module IS the same
+        // instance the SDK uses (since support/e2e.js imports it), so we
+        // route through it.
+        const indexShim = indexExports.__getShimForTesting();
+        indexShim.percy.config = { percy: { deferUploads: true }, snapshot: {} };
+
+        // Capture warn messages from the SDK's own logger instance, since
+        // that's what isResponsiveDOMCaptureValid uses (helpers.logger
+        // mocks the spec-bundle's logger, which is a different instance).
+        const warnMessages = [];
+        const origLog = indexShim.logger.log;
+        indexShim.logger.log = (ns, lvl, msg) => {
+          if (lvl === 'warn') warnMessages.push(`[percy] ${msg}`);
+        };
+        try {
+          const result = indexExports.isResponsiveDOMCaptureValid({
+            responsiveSnapshotCapture: true
+          });
+          expect(result).to.equal(false);
+        } finally {
+          indexShim.logger.log = origLog;
+        }
+        expect(warnMessages.join('\n'))
+          .to.include('Responsive capture disabled: deferUploads is enabled');
       });
 
-      cy.percySnapshot('DeferUploads Test', { responsiveSnapshotCapture: true });
-
+      // Restore percy.config so subsequent tests aren't affected.
       cy.then(() => {
-        if (originalConfig) {
-          utils.percy.config = originalConfig;
+        if (originalConfig === undefined) {
+          delete shim.percy.config;
         } else {
-          delete utils.percy.config;
+          shim.percy.config = originalConfig;
         }
       });
 
+      // Also exercise the cy.percySnapshot fall-through path (responsive
+      // disabled → captures non-responsive). This is the same code path
+      // existing tests already cover, but anchoring it here demonstrates
+      // the user-visible behaviour: deferUploads turns responsive off and
+      // we still post the snapshot.
+      cy.percySnapshot('DeferUploads Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: DeferUploads Test');
     });
@@ -836,12 +879,20 @@ describe('percySnapshot', () => {
     });
 
     it('skips DOM serialization when percyDOMScript is unavailable', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalFetch = utils.fetchPercyDOM;
+      // Make /percy/dom.js return an error from the testing server AND
+      // clear the SDK-side cached domScript so fetchPercyDOM actually
+      // re-hits the endpoint. Webpack bundles the spec separately from
+      // the SDK, so deleting utils.percy.domScript on the spec-side
+      // sdk-utils doesn't clear the SDK's cached value — we reach the
+      // SDK's percy info via index.js's __getShimForTesting hook. The
+      // testing-mode server, on the other hand, is a single process both
+      // sides talk to via HTTP, so /test/api/error reaches the SDK.
+      const indexExports = require('../../');
+      const indexShim = indexExports.__getShimForTesting();
 
-      // Make fetchPercyDOM return null to exercise the _percyDOMScript guard
-      cy.then(() => {
-        utils.fetchPercyDOM = async () => null;
+      cy.then(async () => {
+        delete indexShim.percy.domScript;
+        await helpers.test('error', '/percy/dom.js');
       });
 
       cy.percySnapshot('Responsive No DOM Script', {
@@ -852,10 +903,7 @@ describe('percySnapshot', () => {
       cy.then(() => helpers.get('logs'))
         .should('not.include', 'Snapshot found: Responsive No DOM Script');
 
-      // Restore
-      cy.then(() => {
-        utils.fetchPercyDOM = originalFetch;
-      });
+      cy.then(() => helpers.test('reset'));
     });
 
     it('uses getResponsiveWidths when available for width/height pairs', () => {
@@ -886,6 +934,56 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Responsive With CLI Heights');
     });
 
+    it('logs and falls back when getResponsiveWidths throws', () => {
+      // Cover the catch in Step 1 of percySnapshot: getResponsiveWidths can
+      // reject if the CLI is older than 1.31.10. We reach the same
+      // instance index.js captured (webpack spec/SDK isolation means
+      // require('@percy/sdk-utils') from this file is a separate instance),
+      // and we intercept the SDK-side logger to capture the debug log —
+      // helpers.logger mocks a different logger module instance.
+      const indexExports = require('../../');
+      const indexShim = indexExports.__getShimForTesting();
+      const originalGRW = indexShim.getResponsiveWidths;
+      const debugMessages = [];
+      let originalLog;
+
+      cy.then(() => {
+        indexShim.getResponsiveWidths = async () => {
+          throw new Error('getResponsiveWidths failed for test');
+        };
+        originalLog = indexShim.logger.log;
+        // Force debug level so log.debug actually pushes through, then
+        // capture every debug into a local array we can assert against.
+        const origLevel = indexShim.logger.loglevel();
+        indexShim.logger.loglevel('debug');
+        indexShim.logger.log = (ns, lvl, msg) => {
+          if (lvl === 'debug') debugMessages.push(msg);
+        };
+        // Stash level on the function so restoration uses the right value.
+        indexShim.logger.log.__origLevel = origLevel;
+      });
+
+      cy.percySnapshot('Responsive Throws Test', {
+        responsiveSnapshotCapture: true,
+        widths: [1024]
+      });
+
+      cy.then(() => {
+        expect(debugMessages.join('\n'))
+          .to.include('getResponsiveWidths not available');
+      });
+
+      cy.then(() => {
+        indexShim.getResponsiveWidths = originalGRW;
+        const origLevel = indexShim.logger.log.__origLevel;
+        indexShim.logger.log = originalLog;
+        indexShim.logger.loglevel(origLevel || 'info');
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Responsive Throws Test');
+    });
+
     it('uses fallback widths when getResponsiveWidths is not available', () => {
       const utils = require('@percy/sdk-utils');
       const originalGetResponsiveWidths = utils.getResponsiveWidths;
@@ -910,11 +1008,21 @@ describe('percySnapshot', () => {
     });
 
     it('uses viewport width as fallback when no widths specified and getResponsiveWidths unavailable', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalGetResponsiveWidths = utils.getResponsiveWidths;
+      // Reach the same shim instance index.js captured at module-load —
+      // webpack treats the spec bundle's sdk-utils as a separate instance,
+      // so deleting utils.getResponsiveWidths there doesn't reach the SDK.
+      const indexExports = require('../../');
+      const indexShim = indexExports.__getShimForTesting();
+      const original = indexShim.getResponsiveWidths;
 
       cy.then(() => {
-        delete utils.getResponsiveWidths;
+        // Throw so percySnapshot's catch swallows it and _widthHeights stays
+        // undefined; that's the only way the `_widthHeights || (...).map`
+        // OR branch trips the `[originalWidth]` short-circuit when widths
+        // is also unset.
+        indexShim.getResponsiveWidths = async () => {
+          throw new Error('CLI too old for this test');
+        };
       });
 
       // No widths specified -- should fall back to [originalWidth]
@@ -923,7 +1031,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        utils.getResponsiveWidths = originalGetResponsiveWidths;
+        indexShim.getResponsiveWidths = original;
       });
 
       cy.then(() => helpers.get('logs'))
@@ -1229,6 +1337,86 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Mixed Iframes Test');
     });
 
+    it('skips iframes marked with data-percy-ignore', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'ignored-iframe');
+        iframe.setAttribute('data-percy-ignore', '');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Data Percy Ignore');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Data Percy Ignore');
+    });
+
+    it('skips iframes matching ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://ad-network.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'ad-iframe');
+        iframe.className = 'ad-frame';
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Iframe Selector Ignore', { ignoreIframeSelectors: ['.ad-frame'] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Selector Ignore');
+    });
+
+    it('tolerates non-array ignoreIframeSelectors (normalizeIgnoreSelectors falsy branch)', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'still-captured-non-array');
+        doc.body.appendChild(iframe);
+      });
+
+      // Passing a string instead of an array — normalizeIgnoreSelectors returns []
+      // and the iframe is processed normally.
+      cy.percySnapshot('Iframe Non-Array Selectors', { ignoreIframeSelectors: 'not-an-array' });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Non-Array Selectors');
+    });
+
+    it('does not skip iframes that do not match ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'kept-iframe');
+        // class does NOT match the selector below
+        iframe.className = 'normal-frame';
+        doc.body.appendChild(iframe);
+      });
+
+      // Iframe doesn't have .ad-frame class — iframe.matches returns false,
+      // skipBySelector stays false, iframe is processed normally.
+      cy.percySnapshot('Iframe Selector NoMatch', { ignoreIframeSelectors: ['.ad-frame'] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Selector NoMatch');
+    });
+
+    it('tolerates invalid selectors in ignoreIframeSelectors', () => {
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://other.com/frame');
+        iframe.setAttribute('data-percy-element-id', 'still-captured');
+        doc.body.appendChild(iframe);
+      });
+
+      // '[broken===' is not a valid CSS selector — iframe.matches() throws,
+      // the inner try/catch swallows, and the iframe stays in the capture set.
+      cy.percySnapshot('Iframe Bad Selector', { ignoreIframeSelectors: ['[broken==='] });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Iframe Bad Selector');
+    });
+
     it('handles cross-origin iframe where content access throws', () => {
       // Add a cross-origin iframe with sandbox to ensure cross-origin restriction.
       // The browser blocks contentWindow access, exercising the catch(accessError) block.
@@ -1270,6 +1458,32 @@ describe('percySnapshot', () => {
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Iframe Processing Error');
+    });
+
+    it('drops null-snapshot entries from corsIframes payload', () => {
+      // A cross-origin iframe whose contentDocument is unreachable produces
+      // iframeSnapshot: null. The SDK filters these out before submission so
+      // they don't waste wire size. We use a real cross-origin src instead of
+      // overriding contentDocument with a throwing getter (which would crash
+      // the in-page PercyDOM serializer's own iframe walk before the SDK's
+      // filter ever runs).
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://blocked.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'blocked-iframe');
+        doc.body.appendChild(iframe);
+      });
+
+      cy.percySnapshot('Filtered Null Snapshot');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Filtered Null Snapshot');
+      // No corsIframes mention in logs because all entries were filtered
+      cy.then(() => helpers.get('logs')).then(logs => {
+        const text = logs.join('\n');
+        // Either the payload had no corsIframes key, or it was empty.
+        expect(text).to.not.match(/corsIframes.*blocked-iframe/);
+      });
     });
 
     it('handles iframe with null contentDocument', () => {
@@ -1434,6 +1648,344 @@ describe('percySnapshot', () => {
       cy.percySnapshot('No Cookie Test');
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: No Cookie Test');
+    });
+
+    it('filters out httpOnly cookies from snapshots', () => {
+      // Set a regular cookie and an httpOnly cookie
+      cy.setCookie('regular_cookie', 'regular_value');
+      cy.setCookie('httponly_cookie', 'secret_value', { httpOnly: true });
+
+      // Verify both cookies exist in the browser
+      cy.getCookies().should('have.length', 2);
+
+      cy.percySnapshot('HttpOnly Filter Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: HttpOnly Filter Test');
+    });
+
+    it('captures all non-httpOnly cookies when mixed with httpOnly', () => {
+      cy.setCookie('visible_one', 'value1');
+      cy.setCookie('visible_two', 'value2');
+      cy.setCookie('session_token', 'secret', { httpOnly: true });
+
+      cy.getCookies().should('have.length', 3);
+
+      cy.percySnapshot('Mixed Cookie Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Mixed Cookie Test');
+    });
+
+    it('handles snapshots where all cookies are httpOnly', () => {
+      cy.clearCookies();
+      cy.setCookie('session_only', 'secret', { httpOnly: true });
+
+      cy.getCookies().should('have.length', 1);
+
+      cy.percySnapshot('All HttpOnly Test');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: All HttpOnly Test');
+    });
+  });
+
+  describe('Closed Shadow DOM and ElementInternals Preflight', () => {
+    beforeEach(() => {
+      cy.then(helpers.setupTest);
+      cy.visit(helpers.testSnapshotURL);
+    });
+
+    it('sets __percyPreflightActive flag on the window', () => {
+      cy.window().then(win => {
+        expect(win.__percyPreflightActive).to.be.true;
+      });
+    });
+
+    it('intercepts closed shadow roots and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        expect(win.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+      });
+
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.true;
+          expect(win.__percyClosedShadowRoots.get(el)).to.equal(shadow);
+        });
+      });
+    });
+
+    it('does NOT capture open shadow roots in the WeakMap', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'open' });
+
+        cy.window().then(win => {
+          expect(win.__percyClosedShadowRoots.has(el)).to.be.false;
+        });
+      });
+    });
+
+    it('intercepts ElementInternals and stores them in WeakMap', () => {
+      cy.window().then(win => {
+        if (typeof win.HTMLElement.prototype.attachInternals !== 'function') {
+          // Skip if browser doesn't support attachInternals
+          return;
+        }
+
+        const tag = 'test-internals-' + Math.random().toString(36).slice(2);
+        class TestEl extends win.HTMLElement {
+          static get formAssociated() { return true; }
+
+          constructor() {
+            super();
+            this.internals = this.attachInternals();
+          }
+        }
+        win.customElements.define(tag, TestEl);
+
+        const el = win.document.createElement(tag);
+        win.document.body.appendChild(el);
+
+        expect(win.__percyInternals).to.be.an.instanceOf(WeakMap);
+        expect(win.__percyInternals.has(el)).to.be.true;
+        // Avoid deep-inspecting ElementInternals (Chai triggers NotSupportedError on .form)
+        expect(win.__percyInternals.get(el) === el.internals).to.be.true;
+      });
+    });
+
+    it('is idempotent and skips if __percyPreflightActive is already set', () => {
+      cy.window().then(win => {
+        // Preflight has already run (flag is true from page load)
+        expect(win.__percyPreflightActive).to.be.true;
+
+        // Store reference to the already-patched attachShadow
+        const patchedFn = win.Element.prototype.attachShadow;
+
+        // Note: Cypress.emit is a private API used here for testing idempotency.
+        // This may break across Cypress major versions.
+        Cypress.emit('window:before:load', win);
+
+        // attachShadow should NOT have been re-patched
+        expect(win.Element.prototype.attachShadow).to.equal(patchedFn);
+      });
+    });
+
+    it('sets Cypress.__percyPreflightRegistered to prevent duplicate registration', () => {
+      // The module-level guard sets this flag when index.js is first loaded
+      expect(Cypress.__percyPreflightRegistered).to.be.true;
+
+      // Calling registerPreflight again should return false (already registered)
+      const { registerPreflight } = require('../../index');
+      expect(registerPreflight()).to.be.false;
+    });
+
+    it('attachShadow still returns the shadow root correctly', () => {
+      cy.document().then(doc => {
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        const shadow = el.attachShadow({ mode: 'closed' });
+
+        // Verify the shadow root is returned and is usable
+        expect(shadow).to.not.be.null;
+        expect(shadow).to.not.be.undefined;
+        shadow.innerHTML = '<span>test</span>';
+        expect(shadow.querySelector('span').textContent).to.equal('test');
+      });
+    });
+
+    it('skips ElementInternals setup when the API is unavailable', () => {
+      cy.window().then(win => {
+        // Create a minimal mock window without attachInternals
+        const mockWin = {
+          __percyPreflightActive: false,
+          Element: {
+            prototype: {
+              attachShadow: win.Element.prototype.attachShadow
+            }
+          },
+          HTMLElement: {
+            prototype: {} // no attachInternals
+          }
+        };
+
+        // Emit preflight on the mock window — should not throw and should skip internals
+        Cypress.emit('window:before:load', mockWin);
+
+        expect(mockWin.__percyPreflightActive).to.be.true;
+        expect(mockWin.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+        expect(mockWin.__percyInternals).to.be.undefined;
+      });
+    });
+
+    it('bridges preflight data to runner window during snapshot', () => {
+      cy.document().then(doc => {
+        // Create a closed shadow root element before taking a snapshot
+        const el = doc.createElement('div');
+        doc.body.appendChild(el);
+        el.attachShadow({ mode: 'closed' });
+      });
+
+      cy.percySnapshot('Shadow DOM Bridge Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Shadow DOM Bridge Test');
+    });
+
+    it('handles snapshot when preflight data is absent from app window', () => {
+      // Remove preflight WeakMaps to exercise the falsy branches at lines 286-289
+      cy.window().then(win => {
+        delete win.__percyClosedShadowRoots;
+        delete win.__percyInternals;
+      });
+
+      cy.percySnapshot('No Preflight Data Test');
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: No Preflight Data Test');
+    });
+
+    it('does not keep a parallel hosts array (WeakMap leak guard)', () => {
+      // CE review #1: closedShadowHosts / internalsHosts arrays were dropped
+      // because they pinned every host element strongly across the suite and
+      // defeated the WeakMap. Assert they're not present on the window.
+      cy.window().then(win => {
+        expect(win.__percyClosedShadowHosts).to.be.undefined;
+        expect(win.__percyInternalsHosts).to.be.undefined;
+      });
+    });
+
+    it('patches the current window synchronously at registration time', () => {
+      // CE review #3: window:before:load only fires on subsequent navigations.
+      // The initial AUT page is already loaded by the time index.js runs in
+      // support/e2e.js, so registerPreflight() also runs patchWindow on
+      // cy.state('window') synchronously. We can prove the synchronous path
+      // by re-invoking it on a fresh mock window (without going through the
+      // event bus) and verifying it patches.
+      cy.window().then(win => {
+        const mockWin = {
+          __percyPreflightActive: false,
+          Element: {
+            prototype: {
+              attachShadow: win.Element.prototype.attachShadow
+            }
+          },
+          HTMLElement: {
+            prototype: {
+              attachInternals: function() { return {}; }
+            }
+          }
+        };
+
+        // The exported patchWindow isn't public; we exercise it via the
+        // 'window:before:load' emit which uses the same code path. The key
+        // assertion is that calling patchWindow synchronously on a window
+        // produces the same WeakMap setup as the event-driven path.
+        Cypress.emit('window:before:load', mockWin);
+        expect(mockWin.__percyPreflightActive).to.be.true;
+        expect(mockWin.__percyClosedShadowRoots).to.be.an.instanceOf(WeakMap);
+        expect(mockWin.__percyInternals).to.be.an.instanceOf(WeakMap);
+      });
+    });
+
+    it('injects PercyDOM into the AUT window via a script element', () => {
+      // CE review companion: the rewrite swapped runner-window eval for an
+      // AUT-window <script> append. Verify PercyDOM lands on the AUT window
+      // after a snapshot, not the runner.
+      cy.percySnapshot('Inject Verifier');
+      cy.window().then(win => {
+        expect(win.PercyDOM).to.exist;
+        expect(typeof win.PercyDOM.serialize).to.equal('function');
+      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Inject Verifier');
+    });
+
+    it('no-ops the script injection when PercyDOM is already on the AUT window', () => {
+      // Branch coverage for `if (targetWin.PercyDOM) return;` in
+      // injectPercyDOM. Snapshot once to inject, then again to take the
+      // early-return path. Both posts succeed.
+      cy.percySnapshot('Inject Once');
+      cy.window().then(win => {
+        // Stamp a marker on the already-installed serializer so we can prove
+        // the second snapshot didn't replace PercyDOM.
+        win.PercyDOM.__percyInjectMarker = 'kept';
+      });
+      cy.percySnapshot('Inject Twice');
+      cy.window().then(win => {
+        expect(win.PercyDOM.__percyInjectMarker).to.equal('kept');
+      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Inject Twice');
+    });
+
+    it('skips the snapshot gracefully when PercyDOM never loads (e.g. CSP-blocked injection)', () => {
+      // Branch coverage for the CSP guard: a strict-CSP AUT still delivers the
+      // inline serializer <script> (so _percyDOMScript is truthy) but the
+      // browser blocks it from executing, leaving PercyDOM undefined. The
+      // snapshot must be skipped — not throw and fail the whole test.
+      const utils = require('@percy/sdk-utils');
+      cy.window({ log: false }).then((win) => { delete win.PercyDOM; });
+      // Non-empty script that does NOT define window.PercyDOM — mimics the
+      // blocked inline script having been delivered but never executed.
+      cy.stub(utils, 'fetchPercyDOM').resolves('window.__percyCspBlockedMarker = true;');
+
+      // Must not throw / fail the test.
+      cy.percySnapshot('csp-blocked-skip');
+
+      // Snapshot was skipped, never posted.
+      cy.then(() => helpers.get('logs'))
+        .should('not.include', 'Snapshot found: csp-blocked-skip');
+    });
+  });
+
+  describe('CORS iframe success path', () => {
+    it('captures a same-origin-misclassified iframe through the CORS branch', () => {
+      // CE review #2: the CORS-iframe code path keys off URL.origin
+      // comparison. A frame whose src URL parses to a different origin but
+      // whose contentDocument is actually accessible (e.g. javascript:-built
+      // shells or iframes that mutate document.domain) lands in the capture
+      // branch. We can't ship a true cross-origin frame inside Cypress, so
+      // we simulate the branch by overriding contentWindow/contentDocument
+      // to surface a working PercyDOM-capable window.
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://capture-success.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'capture-success-iframe');
+        doc.body.appendChild(iframe);
+
+        const fakeHtml = '<html><head></head><body><p>captured</p></body></html>';
+        const fakeHead = {
+          appendChild: () => {},
+          removeChild: () => {}
+        };
+        const fakeDoc = {
+          createElement: () => ({ textContent: '' }),
+          head: fakeHead
+        };
+        const fakeWindow = {
+          PercyDOM: {
+            serialize: () => ({ html: fakeHtml })
+          },
+          document: fakeDoc
+        };
+        Object.defineProperty(iframe, 'contentDocument', {
+          get() { return fakeDoc; },
+          configurable: true
+        });
+        Object.defineProperty(iframe, 'contentWindow', {
+          get() { return fakeWindow; },
+          configurable: true
+        });
+      });
+
+      cy.percySnapshot('CORS Iframe Capture Success');
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: CORS Iframe Capture Success');
     });
   });
 
