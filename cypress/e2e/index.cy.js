@@ -1988,4 +1988,81 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: CORS Iframe Capture Success');
     });
   });
+
+  describe('filterSensitiveCookies', () => {
+    // Required lazily (like envUtils above) so importing index.js does not
+    // re-run its module-level side effects at spec load time.
+    const filterSensitiveCookies = (...args) => require('../..').filterSensitiveCookies(...args);
+
+    it('strips cookies whose names match the sensitive pattern', () => {
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'auth_token', value: 'a' },
+        { name: 'XSRF-TOKEN', value: 'x' },
+        { name: 'theme', value: 'dark' },
+        { name: 'locale', value: 'en' }
+      ];
+
+      const result = filterSensitiveCookies(cookies);
+
+      expect(result.map(c => c.name)).to.deep.equal(['theme', 'locale']);
+    });
+
+    it('keeps a cookie with no name (falls back to empty string)', () => {
+      const cookies = [
+        { value: 'no-name' },
+        { name: 'session', value: 's' }
+      ];
+
+      const result = filterSensitiveCookies(cookies);
+
+      // The nameless cookie is not sensitive, so it is retained; `session` is stripped.
+      expect(result).to.have.length(1);
+      expect(result[0].value).to.equal('no-name');
+    });
+
+    it('returns the input unchanged when it is not an array', () => {
+      expect(filterSensitiveCookies(undefined)).to.be.undefined;
+      expect(filterSensitiveCookies(null)).to.be.null;
+    });
+
+    it('forwards all cookies when percyForwardAllCookies is true', () => {
+      const ogConfig = Cypress.config;
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'theme', value: 'dark' }
+      ];
+
+      try {
+        Cypress.config = (key) => (key === 'percyForwardAllCookies' ? true : ogConfig(key));
+        const result = filterSensitiveCookies(cookies);
+        // forwardAll short-circuits, so even the sensitive cookie is returned.
+        expect(result).to.equal(cookies);
+      } finally {
+        Cypress.config = ogConfig;
+      }
+    });
+
+    it('defaults to stripping when reading the config throws', () => {
+      const ogConfig = Cypress.config;
+      const cookies = [
+        { name: 'session_id', value: 's' },
+        { name: 'theme', value: 'dark' }
+      ];
+
+      try {
+        // Only throw for the cookie config key so Cypress's own internal
+        // Cypress.config(...) reads are unaffected.
+        Cypress.config = (key) => {
+          if (key === 'percyForwardAllCookies') throw new Error('config unavailable');
+          return ogConfig(key);
+        };
+        const result = filterSensitiveCookies(cookies);
+        // The catch leaves forwardAll false, so sensitive cookies are still stripped.
+        expect(result.map(c => c.name)).to.deep.equal(['theme']);
+      } finally {
+        Cypress.config = ogConfig;
+      }
+    });
+  });
 });

@@ -26,8 +26,10 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      # A Docker image with Semgrep installed. Do not change this.
-      image: returntocorp/semgrep:1.166.0
+      # A Docker image with Semgrep installed. Pinned by digest (latest at time
+      # of pinning) so a mutable tag cannot swap in a tampered image.
+      image: returntocorp/semgrep@sha256:f4791a54c891eabe1188248135574e6e03dfc31dfd3f3b747c7bec7079bfed1b
+
     # Skip any PR created by dependabot to avoid permission issues:
     if: (github.actor != 'dependabot[bot]')
 

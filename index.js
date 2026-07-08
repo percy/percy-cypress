@@ -76,6 +76,23 @@ registerPreflight();
 
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
+// Cookie names that commonly hold session/auth secrets. These are stripped from
+// snapshot payloads by default so credentials don't leave the tester's trust
+// boundary (CWE-613/CWE-532). Set Cypress config `percyForwardAllCookies: true`
+// to restore the previous behaviour of forwarding the full cookie jar.
+const SENSITIVE_COOKIE_PATTERN = /session|token|auth|sid|jwt|bearer|csrf|xsrf/i;
+
+function filterSensitiveCookies(cookies) {
+  let forwardAll = false;
+  try {
+    forwardAll = Cypress.config('percyForwardAllCookies') === true;
+  } catch (e) {
+    forwardAll = false;
+  }
+  if (forwardAll || !Array.isArray(cookies)) return cookies;
+  return cookies.filter(cookie => !SENSITIVE_COOKIE_PATTERN.test(cookie?.name || ''));
+}
+
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
   return Cypress.backend('http:request', options);
@@ -508,7 +525,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   cy.then(() => {
     if (_skip || _snapshots.length === 0) return;
 
-    cy.getCookies({ log: false }).then(cookies => {
+    cy.getCookies({ log: false }).then(rawCookies => {
+      const cookies = filterSensitiveCookies(rawCookies);
       if (cookies && cookies.length > 0) {
         for (const snap of _snapshots) {
           snap.cookies = cookies;
@@ -559,6 +577,7 @@ module.exports = {
   createRegion,
   registerPreflight,
   isResponsiveDOMCaptureValid,
+  filterSensitiveCookies,
   /* istanbul ignore next: test-only escape hatch */
   __getShimForTesting: () => utils
 };
