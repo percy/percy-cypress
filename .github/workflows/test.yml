@@ -7,6 +7,8 @@ on:
         required: false
         type: string
         default: master
+permissions:
+  contents: read
 jobs:
   test:
     name: Test
@@ -15,8 +17,10 @@ jobs:
         os: [ubuntu-latest]
         node: [20]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
-      - uses: actions-ecosystem/action-regex-match@v2
+      - uses: actions-ecosystem/action-regex-match@9e6c4fb3d5e898f505be7a1fb6e7b0a278f6665b # v2.0.2
         id: regex-match
         if: ${{ github.event_name == 'workflow_dispatch' }}
         with:
@@ -25,8 +29,8 @@ jobs:
       - name: Break on invalid branch name
         run: exit 1
         if: ${{ github.event_name == 'workflow_dispatch' && steps.regex-match.outputs && steps.regex-match.outputs.match == '' }}
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: 'yarn'
@@ -44,7 +48,10 @@ jobs:
           yarn
           yarn build
           yarn global:link
-          cd "$GITHUB_WORKSPACE"
-          yarn remove @percy/cli && yarn link `echo $PERCY_PACKAGES`
-          npx percy --version
+          echo "$(yarn global bin)" >> "$GITHUB_PATH"
+          export PATH="$(yarn global bin):$PATH"
+          cd ${{ github.workspace }}
+          yarn remove @percy/cli >/dev/null 2>&1 || true
+          yarn link `echo $PERCY_PACKAGES` >/dev/null 2>&1 || true
+          percy --version
       - run: yarn test:coverage

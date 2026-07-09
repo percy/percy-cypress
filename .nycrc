@@ -6,6 +6,7 @@
   "exclude": [
     "cypress/e2e/**",
     "cypress/fixtures/**",
-    "cypress/support/**"
+    "cypress/support/**",
+    "cypress/plugins/**"
   ]
 }
