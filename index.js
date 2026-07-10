@@ -394,8 +394,9 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
 
     const useMinHeight = _isResponsive &&
       getEnvValue('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT')?.toString().toLowerCase() === 'true';
+    const mergedCaptureOptions = utils.mergeSnapshotOptions(options);
     const defaultHeight = useMinHeight
-      ? (utils.percy?.config?.snapshot?.minHeight || originalHeight)
+      ? (mergedCaptureOptions.minHeight || originalHeight)
       : originalHeight;
 
     /* istanbul ignore next: legacy alias RESPONSIVE_CAPTURE_SLEEP_TIME is
@@ -489,13 +490,16 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           }
         }
 
+        // Merge .percy.yml config options with snapshot options (snapshot options take priority).
+        // forwardOpts has the SDK-local `readiness` key already stripped.
+        const mergedOptions = utils.mergeSnapshotOptions(forwardOpts);
         // Normalize ignoreIframeSelectors before handing it to PercyDOM.
         // @percy/dom does `selectors.length && selectors.some(...)`, which
         // crashes when the caller passes a string (string has .length but
         // not .some). Our local shim already normalizes for the SDK-side
         // iframe walk; do it once more for PercyDOM's own walk.
         const serializeOpts = {
-          ...forwardOpts,
+          ...mergedOptions,
           ignoreIframeSelectors: resolveIgnoreSelectors(options),
           dom: doc
         };
@@ -508,7 +512,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         }
         if (width !== null) domSnapshot.width = width;
 
-        processCrossOriginIframes(doc, domSnapshot, forwardOpts, _percyDOMScript);
+        processCrossOriginIframes(doc, domSnapshot, mergedOptions, _percyDOMScript);
         _snapshots.push(domSnapshot);
       });
     }

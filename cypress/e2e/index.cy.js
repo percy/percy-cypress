@@ -1536,6 +1536,62 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Iframe PercyDOM Preloaded');
     });
 
+    it('serializes the iframe with .percy.yml config options merged in', () => {
+      // Regression (PER-8053): cross-origin iframe serialization must receive
+      // the config-merged options, not the raw per-call options. A config-only
+      // serialize key (here disableShadowDOM, set on .percy.yml's snapshot
+      // config) must reach the iframe's PercyDOM.serialize, alongside the
+      // force-set enableJavaScript: true.
+      const utils = require('@percy/sdk-utils');
+      const originalConfig = utils.percy?.config;
+      let capturedOpts;
+
+      cy.then(() => {
+        utils.percy = utils.percy || {};
+        utils.percy.config = {
+          ...(originalConfig || {}),
+          snapshot: {
+            ...(originalConfig?.snapshot || {}),
+            disableShadowDOM: true
+          }
+        };
+      });
+
+      cy.document().then(doc => {
+        const iframe = doc.createElement('iframe');
+        iframe.setAttribute('src', 'https://config-merge.example.com/page');
+        iframe.setAttribute('data-percy-element-id', 'config-merge-iframe');
+        doc.body.appendChild(iframe);
+
+        // A real cross-origin iframe's contentWindow/contentDocument are
+        // inaccessible (and unstubbable) in the browser, so the production code
+        // never reaches the iframe's PercyDOM.serialize. Stub both to
+        // controllable fakes so we can capture the options serialize receives.
+        const fakeDoc = { head: { appendChild() {}, removeChild() {} }, createElement: () => ({}) };
+        const fakeWindow = {
+          document: fakeDoc,
+          PercyDOM: {
+            serialize: function(opts) { capturedOpts = opts; return { html: '<html></html>' }; }
+          }
+        };
+        Object.defineProperty(iframe, 'contentWindow', { configurable: true, get: () => fakeWindow });
+        Object.defineProperty(iframe, 'contentDocument', { configurable: true, get: () => fakeDoc });
+      });
+
+      cy.percySnapshot('Iframe Config Merge');
+
+      cy.then(() => {
+        // The config-only key reached the iframe serialize (proves merged
+        // options, not raw per-call options, were forwarded), and
+        // enableJavaScript is still force-set for iframes.
+        expect(capturedOpts).to.have.property('disableShadowDOM', true);
+        expect(capturedOpts).to.have.property('enableJavaScript', true);
+
+        if (originalConfig) utils.percy.config = originalConfig;
+        else delete utils.percy.config;
+      });
+    });
+
     it('handles iframe where PercyDOM injection fails silently', () => {
       // Create a cross-origin iframe where script injection doesn't create PercyDOM
       // This covers branch 9[1] (PercyDOM still doesn't exist after injection)
