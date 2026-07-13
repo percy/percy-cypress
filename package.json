@@ -30,10 +30,10 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "1.32.3-beta.1"
+    "@percy/sdk-utils": "1.32.3-beta.3"
   },
   "resolutions": {
-    "@percy/sdk-utils": "1.32.3-beta.1"
+    "@percy/sdk-utils": "1.32.3-beta.3"
   },
   "peerDependencies": {
     "cypress": ">=3"
