@@ -39,7 +39,7 @@
     "cypress": ">=3"
   },
   "devDependencies": {
-    "@cypress/code-coverage": "^3.14.7",
+    "@cypress/code-coverage": "^4.0.3",
     "@percy/cli": "1.31.14",
     "babel-loader": "^10.0.0",
     "babel-plugin-istanbul": "^7.0.1",
