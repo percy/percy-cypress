@@ -344,7 +344,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     throw error;
   };
 
-  const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
 
@@ -384,6 +383,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   cy.then(() => {
     if (_skip) return;
 
+    const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
+
     // Use CLI-provided width/height pairs when available, fallback to raw widths
     let widthHeights;
     if (_isResponsive) {
@@ -407,6 +408,13 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       ? (getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME') || getEnvValue('RESPONSIVE_CAPTURE_SLEEP_TIME'))
       : null;
     const sleepMs = rawSleepTime ? parseInt(rawSleepTime, 10) * 1000 : 0;
+
+    // The capture below awaits PercyDOM.waitForReady, which can legitimately run
+    // for the full readiness timeout (10s balanced, 30s strict), far beyond the
+    // 4s defaultCommandTimeout that cy.then would otherwise inherit.
+    const captureTimeout = utils.isReadinessDisabled(options)
+      ? CY_TIMEOUT
+      : utils.readinessDeadlineMs(utils.getReadinessConfig(options)) + CY_TIMEOUT;
 
     let lastWindowWidth = originalWidth;
     let lastWindowHeight = defaultHeight;
@@ -437,7 +445,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
       // window so it sees the page's document/Element prototypes — running
       // it in the runner window and passing `dom: aut_doc` would drop shadow
       // roots during cross-window cloneNode.
-      cy.document({ log: false }).then(async doc => {
+      cy.document({ log: false }).then({ timeout: captureTimeout }, async doc => {
         if (_skip || !_percyDOMScript) return;
         const appWin = doc.defaultView;
         /* istanbul ignore next: doc.defaultView is null only for detached

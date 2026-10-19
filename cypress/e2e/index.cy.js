@@ -1,3 +1,4 @@
+import '../support/sdk-utils-instance';
 import helpers from '@percy/sdk-utils/test/helpers';
 import { createRegion } from '../../createRegion';
 
@@ -82,138 +83,125 @@ describe('percySnapshot', () => {
       });
     });
 
-    it('lazy-resolves address via cy.env() when utils.percy.address is unset', () => {
+    describe('lazyResolveAddress()', () => {
       const utils = require('@percy/sdk-utils');
-
-      // Clear address INSIDE the command queue so it's unset when percySnapshot runs.
-      // This triggers the lazy resolution block.
-      cy.then(() => {
-        utils.percy.address = null;
-      });
-
-      cy.percySnapshot('lazy-resolve-test');
-
-      // Restore address for subsequent tests
-      cy.then(() => {
-        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
-      });
-    });
-
-    it('handles cy.env() failure during lazy address resolution gracefully', () => {
-      const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+      let savedAddress;
       let origCyEnv;
 
-      // Clear address and break cy.env INSIDE the command queue
-      // to exercise the catch block in lazyResolveAddress
-      cy.then(() => {
+      // Fake chainable so the test controls what cy.env() yields.
+      const fakeCyEnv = (values) => cy.stub().returns({ then: fn => fn(values) });
+
+      beforeEach(() => {
+        savedAddress = utils.percy.address;
         origCyEnv = cy.env;
-        utils.percy.address = null;
-        cy.env = function() { throw new Error('cy.env not available'); };
       });
 
-      cy.percySnapshot('lazy-resolve-error-test');
+      afterEach(() => {
+        cy.env = origCyEnv;
+        Cypress.expose = originalExpose;
+        Cypress.env = originalEnv;
+        utils.percy.address = savedAddress;
+        // clears the cy.env() values cached by the test
+        envUtils().lazyResolveAddress(log);
+      });
+
+      it('uses the exposed address without calling cy.env()', () => {
+        cy.wrap(null).then(() => {
+          Cypress.expose = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://exposed:5338');
+          cy.env = cy.stub();
+
+          envUtils().lazyResolveAddress(log);
+          expect(utils.percy.address).to.equal('http://exposed:5338');
+          expect(cy.env).not.to.be.called;
+        });
+      });
+
+      it('resolves the address from cy.env() when it is not exposed', () => {
+        cy.wrap(null).then(() => {
+          Cypress.expose = cy.stub().returns(undefined);
+          Cypress.env = cy.stub().throws(new Error('removed in 16'));
+          cy.env = fakeCyEnv({ PERCY_SERVER_ADDRESS: 'http://secure:5338' });
+
+          envUtils().lazyResolveAddress(log);
+          expect(cy.env).to.be.calledWith(match.array.contains(['PERCY_SERVER_ADDRESS']), { log: false });
+          expect(utils.percy.address).to.equal('http://secure:5338');
+        });
+      });
+
+      it('makes other cy.env() values available to getEnvValue()', () => {
+        cy.wrap(null).then(() => {
+          const { lazyResolveAddress, getEnvValue } = envUtils();
+          Cypress.expose = cy.stub().returns(undefined);
+          Cypress.env = cy.stub().throws(new Error('removed in 16'));
+          cy.env = fakeCyEnv({ PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME: '2' });
+
+          lazyResolveAddress(log);
+          expect(getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME')).to.equal('2');
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+
+      it('leaves the address alone when cy.env() yields nothing', () => {
+        cy.wrap(null).then(() => {
+          Cypress.expose = cy.stub().returns(undefined);
+          Cypress.env = cy.stub().throws(new Error('removed in 16'));
+          cy.env = fakeCyEnv(undefined);
+
+          envUtils().lazyResolveAddress(log);
+          expect(cy.env).to.be.called;
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+
+      it('skips cy.env() on Cypress versions without it', () => {
+        cy.wrap(null).then(() => {
+          delete Cypress.expose;
+          Cypress.env = cy.stub().returns(undefined);
+          cy.env = undefined;
+
+          envUtils().lazyResolveAddress(log);
+          expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+
+      it('catches cy.env() errors and logs debug', () => {
+        const debugSpy = cy.spy(log, 'debug');
+
+        cy.wrap(null).then(() => {
+          Cypress.expose = cy.stub().returns(undefined);
+          Cypress.env = cy.stub().throws(new Error('removed in 16'));
+          cy.env = cy.stub().throws(new Error('cy.env not available'));
+
+          envUtils().lazyResolveAddress(log);
+          expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+    });
+
+    // The plugin also forwards PERCY_SERVER_ADDRESS through config.env, which
+    // Cypress 16 only exposes to the browser via cy.env().
+    it('percySnapshot resolves the address through the real cy.env() when not exposed', () => {
+      const utils = require('@percy/sdk-utils');
+      let savedAddress;
 
       cy.then(() => {
-        cy.env = origCyEnv;
-        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+        savedAddress = utils.percy.address;
+        utils.percy.address = 'http://localhost:1';
+        Cypress.expose = cy.stub().returns(undefined);
       });
-    });
 
-    it('lazyResolveAddress() resolves from Cypress.env() when address is falsy', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
+      cy.percySnapshot('Lazy Resolve Test');
 
-      cy.wrap(null).then(() => {
-        const savedAddress = utils.percy.address;
-        // The address getter always returns a truthy default ('http://localhost:5338')
-        // via process.env.PERCY_SERVER_ADDRESS || 'http://localhost:5338'.
-        // To test the resolution path, temporarily override the getter to return null.
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: (v) => { /* no-op during test */ },
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://lazy:5338');
-
-        lazyResolveAddress(log);
-        // lazyResolveAddress calls Cypress.env('PERCY_SERVER_ADDRESS') when address is falsy
-        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
-
-        // Restore the original address property
-        Object.defineProperty(utils.percy, 'address', descriptor);
-        utils.percy.address = savedAddress;
+      cy.then(() => {
+        Cypress.expose = originalExpose;
+        expect(utils.percy.address).to.equal(savedAddress);
       });
-    });
 
-    it('lazyResolveAddress() does not set address when Cypress.env() returns undefined', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-
-      cy.wrap(null).then(() => {
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        let capturedSet = null;
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: (v) => { capturedSet = v; },
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
-
-        lazyResolveAddress(log);
-        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // addr is falsy (undefined) so address should NOT be set
-        expect(capturedSet).to.be.null;
-
-        Object.defineProperty(utils.percy, 'address', descriptor);
-      });
-    });
-
-    it('lazyResolveAddress() catches Cypress.env() errors and logs debug', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-      const debugSpy = cy.spy(log, 'debug');
-
-      cy.wrap(null).then(() => {
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: () => {},
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().throws(new Error('env blocked'));
-
-        lazyResolveAddress(log);
-        expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
-
-        Object.defineProperty(utils.percy, 'address', descriptor);
-      });
-    });
-
-    it('lazyResolveAddress() does nothing when address is already set', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-
-      cy.wrap(null).then(() => {
-        const savedAddress = utils.percy.address;
-        utils.percy.address = 'http://already-set:5338';
-        const envStub = cy.stub();
-        Cypress.env = envStub;
-
-        lazyResolveAddress(log);
-        expect(utils.percy.address).to.equal('http://already-set:5338');
-        expect(envStub).not.to.be.called;
-
-        // Restore
-        utils.percy.address = savedAddress;
-      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Lazy Resolve Test');
     });
   });
 
@@ -449,7 +437,9 @@ describe('percySnapshot', () => {
         serialize: () => ({ html: { html: '<html></html>' } })
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -484,7 +474,9 @@ describe('percySnapshot', () => {
         serialize: () => { calls.push(['serialize']); return { html: { html: '<html></html>' } }; }
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -513,7 +505,9 @@ describe('percySnapshot', () => {
         serialize: () => { calls.push(['serialize']); return { html: { html: '<html></html>' } }; }
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -1039,7 +1033,7 @@ describe('percySnapshot', () => {
     });
 
     it('reloads page when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is set', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
 
       // Delete PercyDOM to force re-injection path (line 203-205)
       const savedPercyDOM = window.PercyDOM;
@@ -1051,7 +1045,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
         // PercyDOM should have been re-injected by the code
         if (!window.PercyDOM && savedPercyDOM) {
           window.PercyDOM = savedPercyDOM;
@@ -1063,7 +1057,7 @@ describe('percySnapshot', () => {
     });
 
     it('uses minHeight from env var PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
 
       cy.percySnapshot('Responsive MinHeight Env', {
         responsiveSnapshotCapture: true,
@@ -1072,7 +1066,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
       });
 
       cy.then(() => helpers.get('logs'))
@@ -1083,7 +1077,7 @@ describe('percySnapshot', () => {
       const utils = require('@percy/sdk-utils');
       const originalConfig = utils.percy?.config;
 
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
 
       cy.then(() => {
         utils.percy = utils.percy || {};
@@ -1099,7 +1093,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
         if (originalConfig) {
           utils.percy.config = originalConfig;
         } else {
@@ -1115,7 +1109,7 @@ describe('percySnapshot', () => {
       const utils = require('@percy/sdk-utils');
       const originalConfig = utils.percy?.config;
 
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
 
       // Ensure no minHeight in config
       cy.then(() => {
@@ -1131,7 +1125,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
         if (originalConfig) {
           utils.percy.config = originalConfig;
         } else {
@@ -1144,7 +1138,7 @@ describe('percySnapshot', () => {
     });
 
     it('waits when PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME is set', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '1');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '1');
 
       cy.percySnapshot('Responsive Sleep Test', {
         responsiveSnapshotCapture: true,
@@ -1152,7 +1146,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
       });
 
       cy.then(() => helpers.get('logs'))
@@ -1546,7 +1540,9 @@ describe('percySnapshot', () => {
       const originalConfig = utils.percy?.config;
       let capturedOpts;
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
