@@ -1073,66 +1073,40 @@ describe('percySnapshot', () => {
         .should('include', 'Snapshot found: Responsive MinHeight Env');
     });
 
+    // The healthcheck inside percySnapshot overwrites percy.config (the CLI
+    // always sends a default snapshot.minHeight) unless percy.enabled is
+    // already set, so run it first on the SDK's own sdk-utils instance and
+    // then override the config; setupTest clears both before the next test.
+    const setSdkSnapshotConfig = snapshotConfig => cy.then(async () => {
+      const sdkUtils = require('../../').__getShimForTesting();
+      await sdkUtils.isPercyEnabled();
+      sdkUtils.percy.config = { ...sdkUtils.percy.config, snapshot: snapshotConfig };
+    });
+
     it('uses config snapshot minHeight when option not provided', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalConfig = utils.percy?.config;
-
       Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
-
-      cy.then(() => {
-        utils.percy = utils.percy || {};
-        utils.percy.config = utils.percy.config || {};
-        utils.percy.config.snapshot = utils.percy.config.snapshot || {};
-        utils.percy.config.snapshot.minHeight = 800;
-      });
+      setSdkSnapshotConfig({ minHeight: 800 });
 
       cy.percySnapshot('Responsive Config MinHeight', {
         responsiveSnapshotCapture: true,
         widths: [1280]
-        // No minHeight option -- falls through to config
       });
 
-      cy.then(() => {
-        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
-        if (originalConfig) {
-          utils.percy.config = originalConfig;
-        } else {
-          delete utils.percy.config;
-        }
-      });
-
+      cy.then(() => Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined));
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Responsive Config MinHeight');
     });
 
     it('uses originalHeight as minHeight fallback', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalConfig = utils.percy?.config;
-
       Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
-
-      // Ensure no minHeight in config
-      cy.then(() => {
-        utils.percy = utils.percy || {};
-        utils.percy.config = utils.percy.config || {};
-        utils.percy.config.snapshot = {};
-      });
+      setSdkSnapshotConfig({});
 
       cy.percySnapshot('Responsive Height Fallback', {
         responsiveSnapshotCapture: true,
         widths: [1280]
-        // No minHeight option, no config minHeight -- falls through to originalHeight
       });
 
-      cy.then(() => {
-        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
-        if (originalConfig) {
-          utils.percy.config = originalConfig;
-        } else {
-          delete utils.percy.config;
-        }
-      });
-
+      cy.then(() => Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined));
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Responsive Height Fallback');
     });
