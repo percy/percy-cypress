@@ -13,9 +13,16 @@ jobs:
   test:
     name: Test
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         node: [22, 24]
+        include:
+          # peerDependency is cypress >=3; keep the pre-16 code paths (sync
+          # Cypress.env(), cy.env() on 15.10+) and Node 20 under test.
+          - os: ubuntu-latest
+            node: 20
+            cypress: 15
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -35,6 +42,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'yarn'
       - run: yarn
+      - name: Install Cypress ${{ matrix.cypress }}
+        if: ${{ matrix.cypress }}
+        run: yarn add --dev cypress@${{ matrix.cypress }}
       - name: Set up @percy/cli from git
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
