@@ -84,6 +84,27 @@ cy.on("uncaught:exception", (e, runnable) => {});
 
 ```
 
+## Percy CLI address and environment values
+
+The SDK talks to the Percy CLI on `http://localhost:5338` by default. When the CLI runs on another
+port (`percy exec --port <port>`), or when you set any of the `PERCY_RESPONSIVE_CAPTURE_*` values,
+pass them to the browser in one of these ways:
+
+- **Cypress 15.10+ (required on Cypress 16):** expose them, for example
+  `cypress run --expose PERCY_SERVER_ADDRESS=http://localhost:5420`, or in `cypress.config.js`:
+
+  ```js
+  module.exports = defineConfig({
+    expose: { PERCY_SERVER_ADDRESS: process.env.PERCY_SERVER_ADDRESS }
+  });
+  ```
+
+- **Environment variables:** `CYPRESS_PERCY_SERVER_ADDRESS=http://localhost:5420` (or `--env`). On
+  Cypress 15.10+ the SDK reads these through `cy.env()`, so they also work with
+  `allowCypressEnv: false` and on Cypress 16, which removed `Cypress.env()`.
+
+The SDK checks `Cypress.expose()` first, then `cy.env()`, then `Cypress.env()` on Cypress 15 and older.
+
 ## Upgrading
 
 ### Automatically with `@percy/migrate`
