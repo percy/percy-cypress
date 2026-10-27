@@ -13,9 +13,16 @@ jobs:
   test:
     name: Test
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        node: [20]
+        node: [22, 24]
+        include:
+          # peerDependency is cypress >=3; keep the pre-16 code paths (sync
+          # Cypress.env(), cy.env() on 15.10+) and Node 20 under test.
+          - os: ubuntu-latest
+            node: 20
+            cypress: 15.21.1
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -35,6 +42,19 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'yarn'
       - run: yarn
+        if: ${{ !matrix.cypress }}
+      # Keep the lockfile as is: install the locked deps (the locked cypress 16
+      # package fails yarn's engine check on Node 20), then run the tests on a
+      # pinned Cypress binary through CYPRESS_RUN_BINARY.
+      - name: Install with Cypress ${{ matrix.cypress }}
+        if: ${{ matrix.cypress }}
+        run: |
+          CYPRESS_INSTALL_BINARY=0 yarn install --frozen-lockfile --ignore-engines
+          npx --yes cypress@${{ matrix.cypress }} install
+          echo "CYPRESS_RUN_BINARY=$HOME/.cache/Cypress/${{ matrix.cypress }}/Cypress/Cypress" >> "$GITHUB_ENV"
+      # cypress/e2e/subdomain.cy.js hops between two subdomains of one site.
+      - name: Map test subdomains to localhost
+        run: echo "127.0.0.1 a.percy.test b.percy.test" | sudo tee -a /etc/hosts
       - name: Set up @percy/cli from git
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
@@ -55,3 +75,4 @@ jobs:
           yarn link `echo $PERCY_PACKAGES` >/dev/null 2>&1 || true
           percy --version
       - run: yarn test:coverage
+      - run: yarn test:component

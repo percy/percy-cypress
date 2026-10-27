@@ -1,3 +1,4 @@
+import '../support/sdk-utils-instance';
 import helpers from '@percy/sdk-utils/test/helpers';
 import { createRegion } from '../../createRegion';
 
@@ -16,13 +17,17 @@ describe('percySnapshot', () => {
     let originalEnv;
     let originalExpose;
 
+    let originalCyEnv;
+
     beforeEach(() => {
       // Store original methods
       originalEnv = Cypress.env;
       originalExpose = Cypress.expose;
+      originalCyEnv = cy.env;
     });
 
     afterEach(() => {
+      cy.env = originalCyEnv;
       // Restore original methods
       if (originalEnv) {
         Cypress.env = originalEnv;
@@ -82,138 +87,286 @@ describe('percySnapshot', () => {
       });
     });
 
-    it('lazy-resolves address via cy.env() when utils.percy.address is unset', () => {
-      const utils = require('@percy/sdk-utils');
+    it('getEnvValue() treats an empty exposed value as unset', () => {
+      const { getEnvValue } = envUtils();
+      Cypress.expose = cy.stub().returns('');
+      Cypress.env = cy.stub().returns('http://fallback:5338');
 
-      // Clear address INSIDE the command queue so it's unset when percySnapshot runs.
-      // This triggers the lazy resolution block.
-      cy.then(() => {
-        utils.percy.address = null;
-      });
-
-      cy.percySnapshot('lazy-resolve-test');
-
-      // Restore address for subsequent tests
-      cy.then(() => {
-        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+      cy.wrap(null).then(() => {
+        expect(getEnvValue('PERCY_SERVER_ADDRESS')).to.equal('http://fallback:5338');
       });
     });
 
-    it('handles cy.env() failure during lazy address resolution gracefully', () => {
+    describe('lazyResolveAddress()', () => {
       const utils = require('@percy/sdk-utils');
+      const log = utils.logger('cypress');
+      let savedAddress;
       let origCyEnv;
+      let origCyExec;
+      let origVersion;
 
-      // Clear address and break cy.env INSIDE the command queue
-      // to exercise the catch block in lazyResolveAddress
-      cy.then(() => {
+      // Fake chainables so the test controls what cy.env() / cy.exec() yield.
+      const fakeCyEnv = (values) => cy.stub().returns({ then: fn => fn(values) });
+      const fakeCyExec = (result) => cy.stub().returns({ then: fn => fn(result) });
+      const noSecureEnv = () => {
+        Cypress.expose = cy.stub().returns(undefined);
+        Cypress.env = cy.stub().throws(new Error('removed in 16'));
+      };
+
+      beforeEach(() => {
+        savedAddress = utils.percy.address;
         origCyEnv = cy.env;
-        utils.percy.address = null;
-        cy.env = function() { throw new Error('cy.env not available'); };
+        origCyExec = cy.exec;
+        origVersion = Cypress.version;
+        envUtils().resetEnvCache();
       });
 
-      cy.percySnapshot('lazy-resolve-error-test');
+      afterEach(() => {
+        cy.env = origCyEnv;
+        cy.exec = origCyExec;
+        Cypress.version = origVersion;
+        Cypress.expose = originalExpose;
+        Cypress.env = originalEnv;
+        utils.percy.address = savedAddress;
+        envUtils().resetEnvCache();
+      });
+
+      it('skips cy.env() when every key is exposed', () => {
+        cy.wrap(null).then(() => {
+          Cypress.expose = cy.stub().callsFake(key => key === 'PERCY_SERVER_ADDRESS' ? 'http://exposed:5338' : '0');
+          cy.env = cy.stub();
+
+          envUtils().lazyResolveAddress(log);
+          expect(utils.percy.address).to.equal('http://exposed:5338');
+          expect(cy.env).not.to.be.called;
+        });
+      });
+
+      it('still reads unexposed keys through cy.env() when the address is exposed', () => {
+        cy.wrap(null).then(() => {
+          const { lazyResolveAddress, getEnvValue } = envUtils();
+          Cypress.expose = cy.stub().callsFake(key => key === 'PERCY_SERVER_ADDRESS' ? 'http://exposed:5338' : undefined);
+          Cypress.env = cy.stub().throws(new Error('removed in 16'));
+          cy.env = fakeCyEnv({ PERCY_SERVER_ADDRESS: 'http://secure:5338', PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME: '2' });
+
+          lazyResolveAddress(log);
+          expect(cy.env).to.be.calledWith(match(keys => !keys.includes('PERCY_SERVER_ADDRESS')), { log: false });
+          expect(cy.env).to.be.calledWith(match.array.contains(['PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME']));
+          expect(getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME')).to.equal('2');
+          expect(utils.percy.address).to.equal('http://exposed:5338');
+        });
+      });
+
+      it('resolves the address from cy.env() when it is not exposed', () => {
+        cy.wrap(null).then(() => {
+          noSecureEnv();
+          cy.env = fakeCyEnv({ PERCY_SERVER_ADDRESS: 'http://secure:5338' });
+          cy.exec = cy.stub();
+
+          envUtils().lazyResolveAddress(log);
+          expect(cy.env).to.be.calledWith(match.array.contains(['PERCY_SERVER_ADDRESS']), { log: false });
+          expect(utils.percy.address).to.equal('http://secure:5338');
+          expect(cy.exec).not.to.be.called;
+        });
+      });
+
+      it('makes other cy.env() values available to getEnvValue()', () => {
+        cy.wrap(null).then(() => {
+          const { lazyResolveAddress, getEnvValue } = envUtils();
+          noSecureEnv();
+          Cypress.version = '16.1.1';
+          cy.env = fakeCyEnv({ PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME: '2' });
+
+          lazyResolveAddress(log);
+          expect(getEnvValue('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME')).to.equal('2');
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+
+      it('leaves the address alone on Cypress 16 when nothing is configured', () => {
+        cy.wrap(null).then(() => {
+          noSecureEnv();
+          Cypress.version = '16.1.1';
+          cy.env = fakeCyEnv(undefined);
+          cy.exec = cy.stub();
+
+          envUtils().lazyResolveAddress(log);
+          expect(cy.env).to.be.called;
+          expect(cy.exec).not.to.be.called;
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+
+      // Point the default-port probe at a closed port so cy.exec() is needed.
+      const cliNotOnDefaultPort = () => envUtils().resetEnvCache({ defaultAddress: 'http://localhost:1' });
+
+      it('reads PERCY_SERVER_ADDRESS through cy.exec() once per spec before Cypress 16', () => {
+        const { lazyResolveAddress, EXEC_ADDRESS_CMD } = envUtils();
+        cy.then(() => {
+          cliNotOnDefaultPort();
+          noSecureEnv();
+          Cypress.version = '15.21.1';
+          cy.env = fakeCyEnv({});
+          cy.exec = fakeCyExec({ exitCode: 0, stdout: 'http://exec:5338\r\n' });
+          lazyResolveAddress(log);
+        });
+        cy.then(() => {
+          expect(cy.exec).to.be.calledOnceWith(EXEC_ADDRESS_CMD, match({ failOnNonZeroExit: false, log: false }));
+          expect(utils.percy.address).to.equal('http://exec:5338');
+          utils.percy.address = savedAddress;
+          lazyResolveAddress(log);
+        });
+        cy.then(() => {
+          expect(cy.exec).to.be.calledOnce;
+          expect(utils.percy.address).to.equal('http://exec:5338');
+        });
+      });
+
+      it('skips cy.exec() when the CLI answers on the default port', () => {
+        const { lazyResolveAddress, resetEnvCache } = envUtils();
+        const cliAddress = originalExpose('PERCY_SERVER_ADDRESS');
+        cy.then(() => {
+          resetEnvCache({ defaultAddress: cliAddress });
+          noSecureEnv();
+          Cypress.version = '15.21.1';
+          cy.env = fakeCyEnv({});
+          cy.exec = cy.stub();
+          utils.percy.address = 'http://localhost:1';
+          lazyResolveAddress(log);
+        });
+        cy.then(() => {
+          expect(cy.exec).not.to.be.called;
+          expect(utils.percy.address).to.equal(cliAddress);
+          utils.percy.address = 'http://localhost:1';
+          lazyResolveAddress(log);
+        });
+        cy.then(() => expect(utils.percy.address).to.equal(cliAddress));
+      });
+
+      it('skips cy.exec() in interactive mode', () => {
+        const ogInteractive = Cypress.config('isInteractive');
+        cy.then(() => {
+          cliNotOnDefaultPort();
+          noSecureEnv();
+          Cypress.version = '15.21.1';
+          Cypress.config().isInteractive = true;
+          cy.env = fakeCyEnv({});
+          cy.exec = cy.stub();
+          envUtils().lazyResolveAddress(log);
+        });
+        cy.then(() => {
+          Cypress.config().isInteractive = ogInteractive;
+          expect(cy.exec).not.to.be.called;
+        });
+      });
+
+      it('uses cy.exec() on Cypress versions without cy.env()', () => {
+        cy.then(() => {
+          cliNotOnDefaultPort();
+          delete Cypress.expose;
+          Cypress.env = cy.stub().returns(undefined);
+          Cypress.version = '12.17.4';
+          cy.env = undefined;
+          // Cypress < 13 reports the exit code as `code`
+          cy.exec = fakeCyExec({ code: 0, stdout: 'http://exec-legacy:5338\n' });
+          envUtils().lazyResolveAddress(log);
+        });
+        cy.then(() => {
+          expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
+          expect(utils.percy.address).to.equal('http://exec-legacy:5338');
+        });
+      });
+
+      for (const [title, result] of [
+        ['the variable is unset', { exitCode: 0, stdout: 'undefined\n' }],
+        ['node is missing', { exitCode: 127, stdout: '', stderr: 'node: not found' }],
+        ['the result is empty', undefined]
+      ]) {
+        it(`keeps the default address when cy.exec() reports ${title}`, () => {
+          const { lazyResolveAddress } = envUtils();
+          cy.then(() => {
+            cliNotOnDefaultPort();
+            noSecureEnv();
+            Cypress.version = '15.21.1';
+            cy.env = fakeCyEnv({});
+            cy.exec = fakeCyExec(result);
+            lazyResolveAddress(log);
+          });
+          cy.then(() => lazyResolveAddress(log));
+          cy.then(() => {
+            expect(cy.exec).to.be.calledOnce;
+            expect(utils.percy.address).to.equal(savedAddress);
+          });
+        });
+      }
+
+      it('catches cy.env() and cy.exec() errors and logs debug', () => {
+        const debugSpy = cy.spy(log, 'debug');
+
+        cy.then(() => {
+          cliNotOnDefaultPort();
+          noSecureEnv();
+          Cypress.version = '15.21.1';
+          cy.env = cy.stub().throws(new Error('cy.env not available'));
+          cy.exec = cy.stub().throws(new Error('cy.exec not available'));
+          envUtils().lazyResolveAddress(log);
+          expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
+        });
+        cy.then(() => {
+          expect(debugSpy).to.be.calledWithMatch('Could not read PERCY_SERVER_ADDRESS');
+          expect(utils.percy.address).to.equal(savedAddress);
+        });
+      });
+    });
+
+    // The plugin also forwards PERCY_SERVER_ADDRESS through config.env, which
+    // Cypress 16 only exposes to the browser via cy.env().
+    it('percySnapshot resolves the address through the real cy.env() when not exposed', () => {
+      const utils = require('@percy/sdk-utils');
+      let savedAddress;
+
+      cy.then(() => {
+        savedAddress = utils.percy.address;
+        utils.percy.address = 'http://localhost:1';
+        Cypress.expose = cy.stub().returns(undefined);
+      });
+
+      cy.percySnapshot('Lazy Resolve Test');
+
+      cy.then(() => {
+        Cypress.expose = originalExpose;
+        expect(utils.percy.address).to.equal(savedAddress);
+      });
+
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Lazy Resolve Test');
+    });
+
+    // The CLI only sets PERCY_SERVER_ADDRESS in the Cypress process; nothing
+    // forwards it to the browser in this test.
+    it('percySnapshot reads the address through the real cy.exec() before Cypress 16', function() {
+      if (parseInt(Cypress.version, 10) >= 16) this.skip();
+      const utils = require('@percy/sdk-utils');
+      const origCyEnv = cy.env;
+      let savedAddress;
+
+      cy.then(() => {
+        savedAddress = utils.percy.address;
+        utils.percy.address = 'http://localhost:1';
+        Cypress.expose = cy.stub().returns(undefined);
+        Cypress.env = cy.stub().returns(undefined);
+        if (origCyEnv) cy.env = () => cy.wrap({}, { log: false });
+      });
+
+      cy.percySnapshot('Exec Resolve Test');
 
       cy.then(() => {
         cy.env = origCyEnv;
-        utils.percy.address = helpers.testSnapshotURL.replace('/test/snapshot', '');
+        expect(utils.percy.address).to.equal(savedAddress);
       });
-    });
 
-    it('lazyResolveAddress() resolves from Cypress.env() when address is falsy', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-
-      cy.wrap(null).then(() => {
-        const savedAddress = utils.percy.address;
-        // The address getter always returns a truthy default ('http://localhost:5338')
-        // via process.env.PERCY_SERVER_ADDRESS || 'http://localhost:5338'.
-        // To test the resolution path, temporarily override the getter to return null.
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: (v) => { /* no-op during test */ },
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns('http://lazy:5338');
-
-        lazyResolveAddress(log);
-        // lazyResolveAddress calls Cypress.env('PERCY_SERVER_ADDRESS') when address is falsy
-        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
-
-        // Restore the original address property
-        Object.defineProperty(utils.percy, 'address', descriptor);
-        utils.percy.address = savedAddress;
-      });
-    });
-
-    it('lazyResolveAddress() does not set address when Cypress.env() returns undefined', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-
-      cy.wrap(null).then(() => {
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        let capturedSet = null;
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: (v) => { capturedSet = v; },
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().withArgs('PERCY_SERVER_ADDRESS').returns(undefined);
-
-        lazyResolveAddress(log);
-        expect(Cypress.env).to.be.calledWith('PERCY_SERVER_ADDRESS');
-        // addr is falsy (undefined) so address should NOT be set
-        expect(capturedSet).to.be.null;
-
-        Object.defineProperty(utils.percy, 'address', descriptor);
-      });
-    });
-
-    it('lazyResolveAddress() catches Cypress.env() errors and logs debug', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-      const debugSpy = cy.spy(log, 'debug');
-
-      cy.wrap(null).then(() => {
-        const descriptor = Object.getOwnPropertyDescriptor(utils.percy, 'address');
-        Object.defineProperty(utils.percy, 'address', {
-          get: () => null,
-          set: () => {},
-          configurable: true
-        });
-
-        Cypress.env = cy.stub().throws(new Error('env blocked'));
-
-        lazyResolveAddress(log);
-        expect(debugSpy).to.be.calledWithMatch('Could not resolve Percy CLI address');
-
-        Object.defineProperty(utils.percy, 'address', descriptor);
-      });
-    });
-
-    it('lazyResolveAddress() does nothing when address is already set', () => {
-      const { lazyResolveAddress } = envUtils();
-      const utils = require('@percy/sdk-utils');
-      const log = utils.logger('cypress');
-
-      cy.wrap(null).then(() => {
-        const savedAddress = utils.percy.address;
-        utils.percy.address = 'http://already-set:5338';
-        const envStub = cy.stub();
-        Cypress.env = envStub;
-
-        lazyResolveAddress(log);
-        expect(utils.percy.address).to.equal('http://already-set:5338');
-        expect(envStub).not.to.be.called;
-
-        // Restore
-        utils.percy.address = savedAddress;
-      });
+      cy.then(() => helpers.get('logs'))
+        .should('include', 'Snapshot found: Exec Resolve Test');
     });
   });
 
@@ -449,7 +602,9 @@ describe('percySnapshot', () => {
         serialize: () => ({ html: { html: '<html></html>' } })
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -484,7 +639,9 @@ describe('percySnapshot', () => {
         serialize: () => { calls.push(['serialize']); return { html: { html: '<html></html>' } }; }
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -513,7 +670,9 @@ describe('percySnapshot', () => {
         serialize: () => { calls.push(['serialize']); return { html: { html: '<html></html>' } }; }
       });
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -1039,7 +1198,7 @@ describe('percySnapshot', () => {
     });
 
     it('reloads page when PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE is set', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', 'true');
 
       // Delete PercyDOM to force re-injection path (line 203-205)
       const savedPercyDOM = window.PercyDOM;
@@ -1051,7 +1210,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE', undefined);
         // PercyDOM should have been re-injected by the code
         if (!window.PercyDOM && savedPercyDOM) {
           window.PercyDOM = savedPercyDOM;
@@ -1063,7 +1222,7 @@ describe('percySnapshot', () => {
     });
 
     it('uses minHeight from env var PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
 
       cy.percySnapshot('Responsive MinHeight Env', {
         responsiveSnapshotCapture: true,
@@ -1072,79 +1231,53 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
       });
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Responsive MinHeight Env');
     });
 
+    // The healthcheck inside percySnapshot overwrites percy.config (the CLI
+    // always sends a default snapshot.minHeight) unless percy.enabled is
+    // already set, so run it first on the SDK's own sdk-utils instance and
+    // then override the config; setupTest clears both before the next test.
+    const setSdkSnapshotConfig = snapshotConfig => cy.then(async () => {
+      const sdkUtils = require('../../').__getShimForTesting();
+      await sdkUtils.isPercyEnabled();
+      sdkUtils.percy.config = { ...sdkUtils.percy.config, snapshot: snapshotConfig };
+    });
+
     it('uses config snapshot minHeight when option not provided', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalConfig = utils.percy?.config;
-
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
-
-      cy.then(() => {
-        utils.percy = utils.percy || {};
-        utils.percy.config = utils.percy.config || {};
-        utils.percy.config.snapshot = utils.percy.config.snapshot || {};
-        utils.percy.config.snapshot.minHeight = 800;
-      });
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      setSdkSnapshotConfig({ minHeight: 800 });
 
       cy.percySnapshot('Responsive Config MinHeight', {
         responsiveSnapshotCapture: true,
         widths: [1280]
-        // No minHeight option -- falls through to config
       });
 
-      cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
-        if (originalConfig) {
-          utils.percy.config = originalConfig;
-        } else {
-          delete utils.percy.config;
-        }
-      });
-
+      cy.then(() => Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined));
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Responsive Config MinHeight');
     });
 
     it('uses originalHeight as minHeight fallback', () => {
-      const utils = require('@percy/sdk-utils');
-      const originalConfig = utils.percy?.config;
-
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
-
-      // Ensure no minHeight in config
-      cy.then(() => {
-        utils.percy = utils.percy || {};
-        utils.percy.config = utils.percy.config || {};
-        utils.percy.config.snapshot = {};
-      });
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', 'true');
+      setSdkSnapshotConfig({});
 
       cy.percySnapshot('Responsive Height Fallback', {
         responsiveSnapshotCapture: true,
         widths: [1280]
-        // No minHeight option, no config minHeight -- falls through to originalHeight
       });
 
-      cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined);
-        if (originalConfig) {
-          utils.percy.config = originalConfig;
-        } else {
-          delete utils.percy.config;
-        }
-      });
-
+      cy.then(() => Cypress.expose('PERCY_RESPONSIVE_CAPTURE_MIN_HEIGHT', undefined));
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: Responsive Height Fallback');
     });
 
     it('waits when PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME is set', () => {
-      Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '1');
+      Cypress.expose('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', '1');
 
       cy.percySnapshot('Responsive Sleep Test', {
         responsiveSnapshotCapture: true,
@@ -1152,7 +1285,7 @@ describe('percySnapshot', () => {
       });
 
       cy.then(() => {
-        Cypress.env('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
+        Cypress.expose('PERCY_RESPONSIVE_CAPTURE_SLEEP_TIME', undefined);
       });
 
       cy.then(() => helpers.get('logs'))
@@ -1546,7 +1679,9 @@ describe('percySnapshot', () => {
       const originalConfig = utils.percy?.config;
       let capturedOpts;
 
-      cy.then(() => {
+      cy.then(async () => {
+        // The healthcheck replaces utils.percy.config, so run it first.
+        await utils.isPercyEnabled();
         utils.percy = utils.percy || {};
         utils.percy.config = {
           ...(originalConfig || {}),
@@ -2042,6 +2177,269 @@ describe('percySnapshot', () => {
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: CORS Iframe Capture Success');
+    });
+  });
+
+  const lastSnapshot = () => cy.then(() => helpers.get('requests'))
+    .then(reqs => reqs.filter(r => r.url === '/percy/snapshot').pop()?.body);
+
+  describe('component testing defaults', () => {
+    let origTestingType;
+    let origState;
+    const specURL = () => `${helpers.testSnapshotURL}?specPath=/Users/me/project/cypress/component/card.cy.js`;
+
+    beforeEach(() => {
+      origTestingType = Cypress.testingType;
+      origState = cy.state;
+      Cypress.testingType = 'component';
+      cy.visit(specURL());
+    });
+
+    afterEach(() => {
+      cy.state = origState;
+      Cypress.testingType = origTestingType;
+      Cypress.config('percyComponentDefaults', undefined);
+    });
+
+    it('defaults to the live viewport, [data-cy-root] and a URL without specPath', () => {
+      cy.viewport(420, 300);
+      cy.percySnapshot('CT Defaults');
+      cy.percySnapshot('CT Defaults 2');
+
+      lastSnapshot().then(body => {
+        expect(body.widths).to.deep.equal([420]);
+        expect(body.minHeight).to.equal(300);
+        expect(body.scope).to.equal('[data-cy-root]');
+        expect(body.url).to.equal(helpers.testSnapshotURL);
+        expect(body).not.to.have.property('percyComponentDefaults');
+      });
+      cy.then(() => helpers.logger.stdout.filter(l => l.includes('Component test detected')))
+        .should('have.length', 1);
+    });
+
+    it('falls back to the configured viewport', () => {
+      cy.then(() => {
+        cy.state = key => /^viewport(Width|Height)$/.test(key) ? undefined : origState.call(cy, key);
+      });
+      cy.percySnapshot('CT Config Viewport');
+      cy.then(() => { cy.state = origState; });
+
+      lastSnapshot().then(body => {
+        expect(body.widths).to.deep.equal([Cypress.config('viewportWidth')]);
+        expect(body.minHeight).to.equal(Cypress.config('viewportHeight'));
+      });
+    });
+
+    it('lets per-snapshot options win', () => {
+      cy.percySnapshot('CT Overrides', { widths: [800], minHeight: 100, scope: '#app' });
+
+      lastSnapshot().then(body => {
+        expect(body.widths).to.deep.equal([800]);
+        expect(body.minHeight).to.equal(100);
+        expect(body.scope).to.equal('#app');
+      });
+    });
+
+    it('can be turned off per snapshot', () => {
+      cy.percySnapshot('CT Opt Out', { percyComponentDefaults: false });
+
+      lastSnapshot().then(body => {
+        expect(body).not.to.have.property('widths');
+        expect(body).not.to.have.property('scope');
+        expect(body).not.to.have.property('percyComponentDefaults');
+        expect(body.url).to.equal(specURL());
+      });
+    });
+
+    it('can be turned off through Cypress.expose()', () => {
+      cy.then(() => Cypress.expose('percyComponentDefaults', 'false'));
+      cy.percySnapshot('CT Opt Out Expose');
+      cy.then(() => Cypress.expose('percyComponentDefaults', undefined));
+
+      lastSnapshot().then(body => {
+        expect(body).not.to.have.property('scope');
+        expect(body.url).to.equal(specURL());
+      });
+    });
+
+    it('can be turned off through Cypress config', () => {
+      cy.then(() => Cypress.config('percyComponentDefaults', false));
+      cy.percySnapshot('CT Opt Out Config');
+
+      lastSnapshot().then(body => expect(body).not.to.have.property('scope'));
+    });
+
+    it('stays on when explicitly enabled per snapshot', () => {
+      cy.then(() => Cypress.config('percyComponentDefaults', false));
+      cy.percySnapshot('CT Opt In', { percyComponentDefaults: true });
+
+      lastSnapshot().then(body => expect(body.scope).to.equal('[data-cy-root]'));
+    });
+
+    it('leaves e2e snapshots unchanged', () => {
+      cy.then(() => { Cypress.testingType = 'e2e'; });
+      cy.percySnapshot('E2E Unchanged');
+
+      lastSnapshot().then(body => {
+        expect(body).not.to.have.property('widths');
+        expect(body).not.to.have.property('scope');
+        expect(body.url).to.equal(specURL());
+      });
+    });
+  });
+
+  describe('cross-origin pages', () => {
+    let origState;
+    let origOrigin;
+    let origVersion;
+    let origBridge;
+
+    const autAt = (aut) => cy.then(() => {
+      cy.state = key => key === 'autLocation' ? aut : origState.call(cy, key);
+    });
+
+    beforeEach(() => {
+      origState = cy.state;
+      origOrigin = cy.origin;
+      origVersion = Cypress.version;
+      origBridge = Cypress.isCrossOriginSpecBridge;
+    });
+
+    afterEach(() => {
+      cy.state = origState;
+      cy.origin = origOrigin;
+      Cypress.version = origVersion;
+      Cypress.isCrossOriginSpecBridge = origBridge;
+    });
+
+    const restoreState = () => cy.then(() => { cy.state = origState; });
+
+    for (const [title, aut] of [
+      ['no autLocation', undefined],
+      ['a non-http AUT', { origin: 'null' }],
+      ['an AUT on the same origin', { origin: window.location.origin }]
+    ]) {
+      it(`captures directly with ${title}`, () => {
+        autAt(aut);
+        cy.percySnapshot(`Same Origin ${title}`);
+        restoreState();
+        cy.then(() => helpers.get('logs')).should('include', `Snapshot found: Same Origin ${title}`);
+      });
+    }
+
+    it('captures directly on a same-superdomain AUT when document.domain is injected', () => {
+      cy.then(() => { Cypress.version = '13.17.0'; });
+      autAt({ origin: 'http://other.localhost:1', superDomain: window.location.hostname });
+      cy.percySnapshot('Document Domain');
+      restoreState();
+      cy.then(() => helpers.get('logs')).should('include', 'Snapshot found: Document Domain');
+    });
+
+    for (const [title, setup] of [
+      ['cy.origin() is unavailable', () => { cy.origin = undefined; }],
+      ['already inside a spec bridge', () => { Cypress.isCrossOriginSpecBridge = true; }],
+      ['document.domain mode sees another superdomain', () => { Cypress.version = '13.17.0'; cy.origin = undefined; }]
+    ]) {
+      it(`skips with a warning when ${title}`, () => {
+        cy.then(setup);
+        autAt({ origin: 'http://other.test:1', superDomain: 'other.test' });
+        cy.percySnapshot('Cross Origin Unsupported');
+        restoreState();
+
+        cy.then(() => helpers.logger.stderr.join('\n'))
+          .should('include', 'Skipping snapshot "Cross Origin Unsupported"');
+        cy.then(() => helpers.get('logs')).should('not.include', 'Snapshot found: Cross Origin Unsupported');
+      });
+    }
+
+    it('captures through cy.origin() and posts the bridge URL and cookies', () => {
+      let originArgs;
+      cy.then(() => {
+        cy.origin = (origin, opts, fn) => {
+          originArgs = { origin, opts, fn };
+          return cy.wrap({
+            url: 'http://other.test:1/page',
+            cookies: [{ name: 'site', value: '1' }, { name: 'session_id', value: 'secret' }],
+            readinessDiagnostics: { passed: true },
+            readinessError: 'boom',
+            domSnapshot: { html: '<html><body>B</body></html>' }
+          }, { log: false });
+        };
+      });
+      autAt({ origin: 'http://other.test:1', superDomain: 'other.test' });
+      cy.percySnapshot('Cross Origin', {
+        responsiveSnapshotCapture: true,
+        widths: [375, 1280],
+        ignoreIframeSelectors: '.ads'
+      });
+      restoreState();
+
+      cy.then(() => {
+        expect(originArgs.origin).to.equal('http://other.test:1');
+        expect(originArgs.fn.name).to.equal('captureInOrigin');
+        const { args } = originArgs.opts;
+        expect(args.script).to.be.a('string');
+        expect(args.ignoreSelectors).to.deep.equal(['.ads']);
+        expect(args.serializeOpts.ignoreIframeSelectors).to.deep.equal(['.ads']);
+        expect(args.readiness).to.be.an('object');
+        expect(args.timeout).to.be.greaterThan(10000);
+        expect(helpers.logger.stderr.join('\n')).to.include('Responsive capture is not supported yet');
+      });
+      lastSnapshot().then(body => {
+        expect(body.url).to.equal('http://other.test:1/page');
+        expect(body.domSnapshot).not.to.be.an('array');
+        expect(body.domSnapshot.html).to.include('B');
+        expect(body.domSnapshot.readiness_diagnostics).to.deep.equal({ passed: true });
+        expect(body.domSnapshot.cookies).to.deep.equal([{ name: 'site', value: '1' }]);
+      });
+    });
+
+    it('passes no readiness config when readiness is disabled', () => {
+      let args;
+      cy.then(() => {
+        cy.origin = (origin, opts) => {
+          args = opts.args;
+          return cy.wrap({ url: 'http://other.test:1/', domSnapshot: { html: '<html></html>' } }, { log: false });
+        };
+      });
+      autAt({ origin: 'http://other.test:1' });
+      cy.percySnapshot('Cross Origin No Readiness', { readiness: { preset: 'disabled' } });
+      restoreState();
+
+      cy.then(() => {
+        expect(args.readiness).to.equal(null);
+        expect(args.timeout).to.equal(45000);
+      });
+      lastSnapshot().then(body => expect(body.domSnapshot).not.to.have.property('cookies'));
+    });
+
+    it('skips when the serializer never loads in the bridge', () => {
+      cy.then(() => {
+        Cypress.version = '13.17.0';
+        cy.origin = () => cy.wrap(undefined, { log: false });
+      });
+      autAt({ origin: 'http://other.test:1' });
+      cy.percySnapshot('Cross Origin CSP');
+      restoreState();
+
+      cy.then(() => helpers.logger.stderr.join('\n'))
+        .should('include', 'unable to inject its DOM serializer');
+      cy.then(() => helpers.get('logs')).should('not.include', 'Snapshot found: Cross Origin CSP');
+    });
+
+    it('skips cy.origin() when the DOM script is unavailable', () => {
+      const indexShim = require('../../').__getShimForTesting();
+      cy.then(async () => {
+        delete indexShim.percy.domScript;
+        await helpers.test('error', '/percy/dom.js');
+        cy.origin = cy.stub();
+      });
+      autAt({ origin: 'http://other.test:1' });
+      cy.percySnapshot('Cross Origin No Script');
+      restoreState();
+
+      cy.then(() => expect(cy.origin).not.to.be.called);
+      cy.then(() => helpers.test('reset'));
     });
   });
 
