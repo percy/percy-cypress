@@ -25,6 +25,7 @@
   "scripts": {
     "lint": "eslint --ignore-path .gitignore .",
     "test": "percy exec --testing -- cypress run",
+    "test:component": "percy exec --testing -- cypress run --component",
     "coverage": "nyc report --check-coverage",
     "test:coverage": "yarn test && yarn coverage",
     "test:types": "tsd"
@@ -52,7 +53,10 @@
     "eslint-plugin-promise": "^5.1.0",
     "eslint-plugin-standard": "^5.0.0",
     "nyc": "^17.1.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "tsd": "^0.33.0",
+    "vite": "8.3.5",
     "webpack": "^5.102.1"
   }
 }

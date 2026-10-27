@@ -9,7 +9,10 @@ declare global {
     interface Chainable<Subject> {
       percySnapshot(
         name?: string,
-        options?: SnapshotOptions
+        options?: SnapshotOptions & {
+          // Component tests only: set false to skip the viewport/scope defaults.
+          percyComponentDefaults?: boolean
+        }
       ): Chainable<Subject>
     }
   }

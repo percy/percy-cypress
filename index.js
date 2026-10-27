@@ -231,6 +231,150 @@ function processCrossOriginIframes(dom, domSnapshot, options, percyDOMScript) {
   }
 }
 
+const COMPONENT_ROOT_SELECTOR = '[data-cy-root]';
+let componentNoticeLogged = false;
+
+const isFalse = (val) => val === false || String(val).toLowerCase() === 'false';
+
+// Component tests mount into a small viewport inside the spec iframe, so the
+// CLI's default widths and a full-page capture show mostly whitespace.
+function componentDefaultsEnabled(options) {
+  if (Cypress.testingType !== 'component') return false;
+  if (options.percyComponentDefaults !== undefined) return !isFalse(options.percyComponentDefaults);
+  const configured = getEnvValue('percyComponentDefaults') ?? Cypress.config('percyComponentDefaults');
+  return !isFalse(configured);
+}
+
+// Per-snapshot options win over the component defaults, which in turn win over
+// .percy.yml widths (the healthcheck config can't tell explicit widths from defaults).
+function applyComponentDefaults(options, log) {
+  const viewportWidth = cy.state('viewportWidth') || Cypress.config('viewportWidth');
+  const viewportHeight = cy.state('viewportHeight') || Cypress.config('viewportHeight');
+  if (!componentNoticeLogged) {
+    componentNoticeLogged = true;
+    const notice = 'Component test detected: snapshots default to the test viewport ' +
+      `(${viewportWidth}x${viewportHeight}) and scope "${COMPONENT_ROOT_SELECTOR}". ` +
+      'Pass widths/minHeight/scope per snapshot to override, or set percyComponentDefaults: false to disable.';
+    // info logs only reach the browser console, so also show it in the command log
+    log.info(notice);
+    cylog(notice);
+  }
+  return {
+    widths: [viewportWidth],
+    minHeight: viewportHeight,
+    scope: COMPONENT_ROOT_SELECTOR,
+    ...options
+  };
+}
+
+// The spec iframe URL carries the absolute local spec path in ?specPath=.
+function componentSnapshotURL(url) {
+  const { origin, pathname } = new URL(url);
+  return origin + pathname;
+}
+
+// cy.document() and friends refuse to run against an AUT on another origin
+// (since Cypress 14 that includes sibling subdomains), so the capture has to
+// go through cy.origin(). Returns null for the same-origin path.
+function crossOriginTarget() {
+  const aut = cy.state('autLocation');
+  const autOrigin = aut?.origin;
+  if (!autOrigin || !/^https?:/.test(autOrigin) || autOrigin === window.location.origin) return null;
+
+  // With document.domain injection (the default before Cypress 14, opt-in after)
+  // a same-superdomain AUT is still reachable directly, and cy.origin() rejects it.
+  const documentDomain = parseInt(Cypress.version, 10) < 14 || Cypress.config('injectDocumentDomain') === true;
+  const superDomain = aut.superDomain;
+  if (documentDomain && superDomain && `.${window.location.hostname}`.endsWith(`.${superDomain}`)) return null;
+
+  // cy.origin() can't be nested, so a bridge that has itself navigated away can't capture.
+  if (typeof cy.origin !== 'function' || Cypress.isCrossOriginSpecBridge) {
+    return { origin: autOrigin, supported: false };
+  }
+  return { origin: autOrigin, supported: true };
+}
+
+// Runs inside the cy.origin() spec bridge. Cypress stringifies this function,
+// so it may only use its `args` and the bridge's own globals: no closures, no
+// sdk-utils, and no syntax a bundler would compile into helper calls (async,
+// spread, optional chaining).
+/* istanbul ignore next: executes in the cy.origin() bridge, outside nyc's instrumentation */
+function captureInOrigin(args) {
+  let result = {};
+  cy.document({ log: false }).then({ timeout: args.timeout }, function(doc) {
+    let win = doc.defaultView;
+    if (!win.PercyDOM) {
+      let script = doc.createElement('script');
+      script.textContent = args.script;
+      doc.head.appendChild(script);
+      doc.head.removeChild(script);
+    }
+    let PercyDOM = win.PercyDOM;
+    result.url = doc.URL;
+    if (!PercyDOM || typeof PercyDOM.serialize !== 'function') return;
+
+    let ready = Promise.resolve();
+    if (args.readiness && typeof PercyDOM.waitForReady === 'function') {
+      ready = Promise.resolve()
+        .then(function() { return PercyDOM.waitForReady(args.readiness); })
+        .then(function(diagnostics) { result.readinessDiagnostics = diagnostics; },
+          function(e) { result.readinessError = String((e && e.message) || e); });
+    }
+
+    return ready.then(function() {
+      let opts = JSON.parse(JSON.stringify(args.serializeOpts));
+      opts.dom = doc;
+      let domSnapshot = PercyDOM.serialize(opts);
+      if (domSnapshot && typeof domSnapshot.html === 'string') {
+        // Cypress inlines its ~190 KB cross-origin driver into every page it
+        // proxies on a secondary origin; it's inert at render, so drop it.
+        domSnapshot.html = domSnapshot.html.replace(
+          /<script type="text\/javascript">\s*\(function \(cypressConfig\)[\s\S]*?injection_cross_origin[\s\S]*?<\/script>/, '');
+      }
+
+      let frames = [];
+      let pageOrigin = new URL(doc.URL).origin;
+      let iframes = doc.querySelectorAll('iframe');
+      for (let i = 0; i < iframes.length; i++) {
+        let iframe = iframes[i];
+        let id = iframe.getAttribute('data-percy-element-id');
+        if (!id || iframe.hasAttribute('data-percy-ignore') || iframe.getAttribute('srcdoc')) continue;
+        let skip = false;
+        for (let j = 0; j < args.ignoreSelectors.length; j++) {
+          try { if (iframe.matches(args.ignoreSelectors[j])) skip = true; } catch (e) { /* invalid selector */ }
+        }
+        if (skip) continue;
+        let frameUrl;
+        try { frameUrl = new URL(iframe.getAttribute('src'), doc.URL); } catch (e) { continue; }
+        if (!/^https?:$/.test(frameUrl.protocol) || frameUrl.origin === pageOrigin) continue;
+        try {
+          let frameWin = iframe.contentWindow;
+          let frameDoc = iframe.contentDocument || (frameWin && frameWin.document);
+          if (!frameDoc || !frameWin) continue;
+          if (!frameWin.PercyDOM) {
+            let frameScript = frameDoc.createElement('script');
+            frameScript.textContent = args.script;
+            frameDoc.head.appendChild(frameScript);
+            frameDoc.head.removeChild(frameScript);
+          }
+          let frameOpts = JSON.parse(JSON.stringify(args.serializeOpts));
+          frameOpts.enableJavaScript = true;
+          let frameSnapshot = frameWin.PercyDOM && frameWin.PercyDOM.serialize(frameOpts);
+          if (frameSnapshot && frameSnapshot.html) {
+            frames.push({ iframeData: { percyElementId: id }, iframeSnapshot: frameSnapshot, frameUrl: frameUrl.href });
+          }
+        } catch (e) { /* the browser blocks truly cross-origin frames */ }
+      }
+      if (frames.length) domSnapshot.corsIframes = frames;
+      result.domSnapshot = domSnapshot;
+    });
+  });
+  return cy.getCookies({ log: false }).then(function(cookies) {
+    result.cookies = cookies;
+    return result;
+  });
+}
+
 function isResponsiveDOMCaptureValid(options) {
   if (utils.percy?.config?.percy?.deferUploads) {
     const log = utils.logger('cypress');
@@ -308,10 +452,14 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   }
   name = name || cy.state('runnable').fullTitle();
 
+  const isComponent = componentDefaultsEnabled(options);
+  if (isComponent) options = applyComponentDefaults(options, log);
+
   // `readiness` is consumed locally by the SDK; the CLI already gets it from
   // .percy.yml healthcheck. Strip it so it doesn't leak into serialize() args
-  // or round-trip back through postSnapshot.
-  const { readiness: _readiness, ...forwardOpts } = options;
+  // or round-trip back through postSnapshot. `percyComponentDefaults` is
+  // SDK-only too, and older CLIs reject unknown snapshot options.
+  const { readiness: _readiness, percyComponentDefaults: _componentDefaults, ...forwardOpts } = options;
 
   const meta = { snapshot: { name, testCase: options.testCase } };
 
@@ -352,6 +500,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   let _widthHeights = null;
   let _snapshots = [];
   let _isResponsive = false;
+  let _crossOrigin = null;
 
   // Step 1: Preconditions (async — runs in cy.then)
   cy.then({ timeout: CY_TIMEOUT }, async () => {
@@ -379,9 +528,63 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
   });
 
-  // Step 2: Capture DOM at each width (flat cy commands — no async nesting)
+  // Step 2 (cross-origin AUT): capture through cy.origin() at the current viewport
   cy.then(() => {
     if (_skip) return;
+    const target = crossOriginTarget();
+    if (!target) return;
+
+    if (!target.supported) {
+      _skip = true;
+      log.warn(`Skipping snapshot "${name}": the page is on ${target.origin}, a different origin than the ` +
+        'test, and cy.origin() is not available here.');
+      cylog('Snapshot skipped: page is on another origin', { name, origin: target.origin });
+      return;
+    }
+    _crossOrigin = { origin: target.origin };
+    if (!_percyDOMScript) return;
+
+    if (_isResponsive) {
+      log.warn(`Responsive capture is not supported yet after cross-origin navigation; "${name}" ` +
+        'is captured at the current viewport only.');
+      _isResponsive = false;
+    }
+
+    const readinessDisabled = utils.isReadinessDisabled(options);
+    const readiness = readinessDisabled ? null : utils.getReadinessConfig(options);
+    const args = {
+      script: _percyDOMScript,
+      serializeOpts: {
+        ...utils.mergeSnapshotOptions(forwardOpts),
+        ignoreIframeSelectors: resolveIgnoreSelectors(options)
+      },
+      ignoreSelectors: resolveIgnoreSelectors(options),
+      readiness,
+      timeout: readinessDisabled ? CY_TIMEOUT : utils.readinessDeadlineMs(readiness) + CY_TIMEOUT
+    };
+
+    cy.origin(target.origin, { args }, captureInOrigin).then(result => {
+      _crossOrigin.url = result?.url;
+      _crossOrigin.cookies = result?.cookies;
+      if (result?.readinessError) {
+        log.debug(`waitForReady failed, proceeding to serialize: ${result.readinessError}`);
+      }
+      const domSnapshot = result?.domSnapshot;
+      if (!domSnapshot) {
+        log.warn(`Percy is unable to inject its DOM serializer into the page for "${name}" ` +
+          '(this usually means a strict Content-Security-Policy blocked the inline script). ' +
+          'Skipping snapshot.');
+        cylog('Snapshot skipped: DOM serializer unavailable (possible CSP restriction)', { name });
+        return;
+      }
+      if (result.readinessDiagnostics) domSnapshot.readiness_diagnostics = result.readinessDiagnostics;
+      _snapshots.push(domSnapshot);
+    });
+  });
+
+  // Step 2: Capture DOM at each width (flat cy commands — no async nesting)
+  cy.then(() => {
+    if (_skip || _crossOrigin) return;
 
     const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
 
@@ -482,9 +685,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           return;
         }
 
-        // Readiness gate. The package.json floor pins @percy/sdk-utils to
-        // 1.31.15-beta.0+, so isReadinessDisabled / getReadinessConfig are
-        // always present. Older CLI bundles may still lack
+        // Readiness gate. package.json pins @percy/sdk-utils to 1.32.11, so
+        // isReadinessDisabled / getReadinessConfig are always present. Older CLI bundles may still lack
         // PercyDOM.waitForReady — that typeof guard remains the backward-
         // compat path on the @percy/dom side.
         let readinessDiagnostics;
@@ -537,7 +739,16 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
   cy.then(() => {
     if (_skip || _snapshots.length === 0) return;
 
-    cy.getCookies({ log: false }).then(rawCookies => {
+    // Cookies and the URL were read inside cy.origin(); the primary-origin
+    // commands below would fail against a cross-origin AUT.
+    const getCookies = () => _crossOrigin
+      ? cy.wrap(_crossOrigin.cookies, { log: false })
+      : cy.getCookies({ log: false });
+    const getDocument = () => _crossOrigin
+      ? cy.wrap({ URL: _crossOrigin.url }, { log: false })
+      : cy.document({ log: false });
+
+    getCookies().then(rawCookies => {
       const cookies = filterSensitiveCookies(rawCookies);
       if (cookies && cookies.length > 0) {
         for (const snap of _snapshots) {
@@ -545,7 +756,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         }
       }
 
-      cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
+      getDocument().then({ timeout: CY_TIMEOUT }, async doc => {
         const throwConfig = Cypress.config('percyThrowErrorOnFailure');
         const _throw = throwConfig === undefined ? false : throwConfig;
 
@@ -559,7 +770,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
               environmentInfo: ENV_INFO,
               clientInfo: CLIENT_INFO,
               domSnapshot,
-              url: doc.URL,
+              url: isComponent ? componentSnapshotURL(doc.URL) : doc.URL,
               name
             });
           }, 'posting dom snapshot', _throw));
