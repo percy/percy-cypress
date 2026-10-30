@@ -261,6 +261,73 @@ describe('percySnapshot', () => {
     ]);
   });
 
+  it('retries a failing snapshot post before logging the error', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    const originalPost = indexShim.postSnapshot;
+    const originalLog = indexShim.logger.log;
+    const errors = [];
+    let calls = 0;
+
+    cy.then(() => {
+      indexShim.postSnapshot = () => {
+        calls += 1;
+        return Promise.reject(new Error('still down'));
+      };
+      indexShim.logger.log = (ns, lvl, msg) => {
+        if (lvl === 'error') errors.push(String(msg));
+      };
+    });
+
+    // Fail-open: the exhausted retry must not fail the test.
+    cy.percySnapshot('Retry Snapshot');
+
+    cy.then(() => {
+      indexShim.postSnapshot = originalPost;
+      indexShim.logger.log = originalLog;
+      expect(calls).to.equal(3);
+      expect(errors).to.include.members([
+        'Retrying... (1/3)',
+        'Retrying... (2/3)',
+        'Got error while posting dom snapshot',
+        'Error: still down'
+      ]);
+      expect(errors).not.to.include('Retrying... (3/3)');
+    });
+
+    // The final failure is logged, not reported as a successful snapshot.
+    cy.get('@log').should((spy) => {
+      expect(spy).not.to.be.calledWith(match({ name: 'percySnapshot', message: 'Retry Snapshot' }));
+    });
+  });
+
+  it('posts the snapshot when a retry succeeds', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    const originalPost = indexShim.postSnapshot;
+    let calls = 0;
+
+    cy.then(() => {
+      indexShim.postSnapshot = (...args) => {
+        calls += 1;
+        if (calls === 1) return Promise.reject(new Error('transient'));
+        return originalPost(...args);
+      };
+    });
+
+    cy.percySnapshot('Retry Success Snapshot');
+
+    cy.then(() => {
+      indexShim.postSnapshot = originalPost;
+      expect(calls).to.equal(2);
+    });
+
+    cy.then(() => helpers.get('logs'))
+      .should('include', 'Snapshot found: Retry Success Snapshot');
+
+    cy.get('@log').should((spy) => {
+      expect(spy).to.be.calledWith(match({ name: 'percySnapshot', message: 'Retry Success Snapshot' }));
+    });
+  });
+
   describe('if percyThrowErrorOnFailure set to true', () => {
     let ogPercyThrowErrorOnFailure;
 

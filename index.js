@@ -336,8 +336,10 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         return await func();
       } catch (e) {
         error = e;
-        log.error(`Retrying... (${num}/${maxNum})`);
-        await new Promise(res => setTimeout(res, 1000));
+        if (num < maxNum) {
+          log.error(`Retrying... (${num}/${maxNum})`);
+          await new Promise(res => setTimeout(res, 1000));
+        }
       }
       num += 1;
     }
@@ -545,18 +547,20 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const domSnapshot = _isResponsive ? _snapshots : _snapshots[0];
 
         try {
-          let response = await withRetry(async () => await withLog(async () => {
-            return await utils.postSnapshot({
-              ...forwardOpts,
-              environmentInfo: ENV_INFO,
-              clientInfo: CLIENT_INFO,
-              domSnapshot,
-              url: doc.URL,
-              name
-            });
-          }, 'posting dom snapshot', _throw));
+          // Retry the raw post, and only log once retries are exhausted.
+          // withLog swallows the error (returning it) unless _throw is set,
+          // so it must wrap withRetry rather than sit inside it — otherwise
+          // the first failure resolves and no retry ever happens.
+          let response = await withLog(() => withRetry(() => utils.postSnapshot({
+            ...forwardOpts,
+            environmentInfo: ENV_INFO,
+            clientInfo: CLIENT_INFO,
+            domSnapshot,
+            url: doc.URL,
+            name
+          })), 'posting dom snapshot', _throw);
 
-          cylog(name, meta);
+          if (!(response instanceof Error)) cylog(name, meta);
           return response;
         } catch (err) {
           log.error(`Failed to post snapshot "${name}"`, err);
