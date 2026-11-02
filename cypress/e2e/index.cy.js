@@ -2112,6 +2112,59 @@ describe('percySnapshot', () => {
     });
   });
 
+  describe('withRetry', () => {
+    // Required lazily (like filterSensitiveCookies below) to avoid re-running
+    // index.js module-level side effects at spec load time.
+    const withRetry = (...args) => require('../..').withRetry(...args);
+    const wait = ms => new Promise(res => setTimeout(res, ms));
+    let errors;
+    const log = { error: msg => errors.push(msg) };
+
+    beforeEach(() => {
+      errors = [];
+    });
+
+    it('stops retrying when another slow attempt would exceed the budget', () => {
+      let calls = 0;
+      const slowFail = async () => {
+        calls += 1;
+        await wait(200);
+        throw new Error('slow failure');
+      };
+      const started = Date.now();
+
+      cy.then(() => withRetry(slowFail, log, { delay: 10, budget: 500 }).then(
+        () => { throw new Error('expected withRetry to reject'); },
+        err => {
+          expect(err.message).to.equal('slow failure');
+          // A third 200ms attempt would end past the 500ms budget.
+          expect(calls).to.equal(2);
+          expect(Date.now() - started).to.be.below(500);
+          expect(errors).to.deep.equal(['Retrying... (1/3)']);
+        }
+      ));
+    });
+
+    it('abandons an attempt that outlives the budget', () => {
+      let calls = 0;
+      const hang = () => {
+        calls += 1;
+        return new Promise(() => {});
+      };
+      const started = Date.now();
+
+      cy.then(() => withRetry(hang, log, { delay: 10, budget: 100 }).then(
+        () => { throw new Error('expected withRetry to reject'); },
+        err => {
+          expect(err.message).to.equal('Exceeded 100ms retry budget');
+          expect(calls).to.equal(1);
+          expect(Date.now() - started).to.be.below(1000);
+          expect(errors).to.deep.equal([]);
+        }
+      ));
+    });
+  });
+
   describe('filterSensitiveCookies', () => {
     // Required lazily (like envUtils above) so importing index.js does not
     // re-run its module-level side effects at spec load time.

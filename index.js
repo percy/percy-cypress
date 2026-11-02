@@ -98,6 +98,36 @@ utils.request.fetch = async function fetch(url, options) {
   return Cypress.backend('http:request', options);
 };
 
+// The snapshot post runs inside a cy.then bounded by CY_TIMEOUT. If retries
+// outlive it, Cypress fails the customer's test before withLog can swallow the
+// error, so every attempt and delay must finish inside this budget.
+const RETRY_BUDGET = CY_TIMEOUT - 5000;
+
+async function withRetry(func, log, { maxNum = 3, delay = 1000, budget = RETRY_BUDGET } = {}) {
+  const deadline = Date.now() + budget;
+  let num = 1;
+  let error;
+  while (num <= maxNum) {
+    const started = Date.now();
+    let timer;
+    try {
+      return await Promise.race([func(), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Exceeded ${budget}ms retry budget`)), deadline - started);
+      })]);
+    } catch (e) {
+      error = e;
+      // Only retry if another attempt as slow as this one still fits.
+      if (num >= maxNum || Date.now() + delay + (Date.now() - started) > deadline) break;
+      log.error(`Retrying... (${num}/${maxNum})`);
+      await new Promise(res => setTimeout(res, delay));
+    } finally {
+      clearTimeout(timer);
+    }
+    num += 1;
+  }
+  throw error;
+}
+
 function cylog(message, meta) {
   Cypress.log({
     name: 'percySnapshot',
@@ -327,25 +357,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
   };
 
-  const withRetry = async (func) => {
-    let num = 1;
-    const maxNum = 3;
-    let error;
-    while (num <= maxNum) {
-      try {
-        return await func();
-      } catch (e) {
-        error = e;
-        if (num < maxNum) {
-          log.error(`Retrying... (${num}/${maxNum})`);
-          await new Promise(res => setTimeout(res, 1000));
-        }
-      }
-      num += 1;
-    }
-    throw error;
-  };
-
   const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
@@ -558,7 +569,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
             domSnapshot,
             url: doc.URL,
             name
-          })), 'posting dom snapshot', _throw);
+          }), log), 'posting dom snapshot', _throw);
 
           if (!(response instanceof Error)) cylog(name, meta);
           return response;
@@ -586,6 +597,7 @@ module.exports = {
   registerPreflight,
   isResponsiveDOMCaptureValid,
   filterSensitiveCookies,
+  withRetry,
   /* istanbul ignore next: test-only escape hatch */
   __getShimForTesting: () => utils
 };
