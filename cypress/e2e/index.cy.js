@@ -261,6 +261,73 @@ describe('percySnapshot', () => {
     ]);
   });
 
+  it('retries a failing snapshot post before logging the error', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    const originalPost = indexShim.postSnapshot;
+    const originalLog = indexShim.logger.log;
+    const errors = [];
+    let calls = 0;
+
+    cy.then(() => {
+      indexShim.postSnapshot = () => {
+        calls += 1;
+        return Promise.reject(new Error('still down'));
+      };
+      indexShim.logger.log = (ns, lvl, msg) => {
+        if (lvl === 'error') errors.push(String(msg));
+      };
+    });
+
+    // Fail-open: the exhausted retry must not fail the test.
+    cy.percySnapshot('Retry Snapshot');
+
+    cy.then(() => {
+      indexShim.postSnapshot = originalPost;
+      indexShim.logger.log = originalLog;
+      expect(calls).to.equal(3);
+      expect(errors).to.include.members([
+        'Retrying... (1/3)',
+        'Retrying... (2/3)',
+        'Got error while posting dom snapshot',
+        'Error: still down'
+      ]);
+      expect(errors).not.to.include('Retrying... (3/3)');
+    });
+
+    // The final failure is logged, not reported as a successful snapshot.
+    cy.get('@log').should((spy) => {
+      expect(spy).not.to.be.calledWith(match({ name: 'percySnapshot', message: 'Retry Snapshot' }));
+    });
+  });
+
+  it('posts the snapshot when a retry succeeds', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    const originalPost = indexShim.postSnapshot;
+    let calls = 0;
+
+    cy.then(() => {
+      indexShim.postSnapshot = (...args) => {
+        calls += 1;
+        if (calls === 1) return Promise.reject(new Error('transient'));
+        return originalPost(...args);
+      };
+    });
+
+    cy.percySnapshot('Retry Success Snapshot');
+
+    cy.then(() => {
+      indexShim.postSnapshot = originalPost;
+      expect(calls).to.equal(2);
+    });
+
+    cy.then(() => helpers.get('logs'))
+      .should('include', 'Snapshot found: Retry Success Snapshot');
+
+    cy.get('@log').should((spy) => {
+      expect(spy).to.be.calledWith(match({ name: 'percySnapshot', message: 'Retry Success Snapshot' }));
+    });
+  });
+
   describe('if percyThrowErrorOnFailure set to true', () => {
     let ogPercyThrowErrorOnFailure;
 
@@ -2042,6 +2109,59 @@ describe('percySnapshot', () => {
 
       cy.then(() => helpers.get('logs'))
         .should('include', 'Snapshot found: CORS Iframe Capture Success');
+    });
+  });
+
+  describe('withRetry', () => {
+    // Required lazily (like filterSensitiveCookies below) to avoid re-running
+    // index.js module-level side effects at spec load time.
+    const withRetry = (...args) => require('../..').withRetry(...args);
+    const wait = ms => new Promise(res => setTimeout(res, ms));
+    let errors;
+    const log = { error: msg => errors.push(msg) };
+
+    beforeEach(() => {
+      errors = [];
+    });
+
+    it('stops retrying when another slow attempt would exceed the budget', () => {
+      let calls = 0;
+      const slowFail = async () => {
+        calls += 1;
+        await wait(200);
+        throw new Error('slow failure');
+      };
+      const started = Date.now();
+
+      cy.then(() => withRetry(slowFail, log, { delay: 10, budget: 500 }).then(
+        () => { throw new Error('expected withRetry to reject'); },
+        err => {
+          expect(err.message).to.equal('slow failure');
+          // A third 200ms attempt would end past the 500ms budget.
+          expect(calls).to.equal(2);
+          expect(Date.now() - started).to.be.below(500);
+          expect(errors).to.deep.equal(['Retrying... (1/3)']);
+        }
+      ));
+    });
+
+    it('abandons an attempt that outlives the budget', () => {
+      let calls = 0;
+      const hang = () => {
+        calls += 1;
+        return new Promise(() => {});
+      };
+      const started = Date.now();
+
+      cy.then(() => withRetry(hang, log, { delay: 10, budget: 100 }).then(
+        () => { throw new Error('expected withRetry to reject'); },
+        err => {
+          expect(err.message).to.equal('Exceeded 100ms retry budget');
+          expect(calls).to.equal(1);
+          expect(Date.now() - started).to.be.below(1000);
+          expect(errors).to.deep.equal([]);
+        }
+      ));
     });
   });
 
