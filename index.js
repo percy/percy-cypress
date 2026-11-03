@@ -76,21 +76,37 @@ registerPreflight();
 
 utils.percy.address = getEnvValue('PERCY_SERVER_ADDRESS');
 
-// Cookie names that commonly hold session/auth secrets. These are stripped from
-// snapshot payloads by default so credentials don't leave the tester's trust
-// boundary (CWE-613/CWE-532). Set Cypress config `percyForwardAllCookies: true`
-// to restore the previous behaviour of forwarding the full cookie jar.
-const SENSITIVE_COOKIE_PATTERN = /session|token|auth|sid|jwt|bearer|csrf|xsrf/i;
+// Browser cookies are forwarded to the CLI so its asset-discovery browser can
+// load assets that require a logged-in session. Customers can opt out with
+// `PERCY_DO_NOT_USE_CAPTURED_COOKIES=true` (Cypress env, e.g. CYPRESS_* or
+// --env) or the Cypress config `percyDoNotUseCapturedCookies: true`. The legacy
+// `percyForwardAllCookies` config is still accepted but no longer needed, since
+// forwarding is the default.
+const COOKIE_OPT_OUT_WARNING = 'Not sending browser cookies to Percy because ' +
+  'PERCY_DO_NOT_USE_CAPTURED_COOKIES is set. Pages or assets that need a logged-in ' +
+  'session may fail to load during asset discovery, so snapshots can render incorrectly.';
+let cookieOptOutWarned = false;
 
-function filterSensitiveCookies(cookies) {
-  let forwardAll = false;
+const isTruthySetting = (value) => value === true || value === 'true';
+
+function isCookieOptOut() {
   try {
-    forwardAll = Cypress.config('percyForwardAllCookies') === true;
+    if (isTruthySetting(getEnvValue('PERCY_DO_NOT_USE_CAPTURED_COOKIES'))) return true;
+    return isTruthySetting(Cypress.config('percyDoNotUseCapturedCookies'));
   } catch (e) {
-    forwardAll = false;
+    return false;
   }
-  if (forwardAll || !Array.isArray(cookies)) return cookies;
-  return cookies.filter(cookie => !SENSITIVE_COOKIE_PATTERN.test(cookie?.name || ''));
+}
+
+// Returns the cookies to attach to the snapshot, or null when the
+// customer has opted out. Logs the opt-out impact once per spec run.
+function resolveSnapshotCookies(cookies, log) {
+  if (!isCookieOptOut()) return cookies;
+  if (!cookieOptOutWarned) {
+    cookieOptOutWarned = true;
+    log.warn(COOKIE_OPT_OUT_WARNING);
+  }
+  return null;
 }
 
 utils.request.fetch = async function fetch(url, options) {
@@ -530,11 +546,11 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     if (_skip || _snapshots.length === 0) return;
 
     cy.getCookies({ log: false }).then(rawCookies => {
-      const cookies = filterSensitiveCookies(rawCookies);
-      if (cookies && cookies.length > 0) {
-        for (const snap of _snapshots) {
-          snap.cookies = cookies;
-        }
+      const cookies = resolveSnapshotCookies(rawCookies, log);
+      for (const snap of _snapshots) {
+        // On opt-out also drop the document.cookie string the DOM serializer captured.
+        if (cookies === null) delete snap.cookies;
+        else if (cookies && cookies.length > 0) snap.cookies = cookies;
       }
 
       cy.document({ log: false }).then({ timeout: CY_TIMEOUT }, async doc => {
@@ -581,7 +597,8 @@ module.exports = {
   createRegion,
   registerPreflight,
   isResponsiveDOMCaptureValid,
-  filterSensitiveCookies,
+  resolveSnapshotCookies,
+  __resetCookieOptOutWarningForTesting: () => { cookieOptOutWarned = false; },
   /* istanbul ignore next: test-only escape hatch */
   __getShimForTesting: () => utils
 };
