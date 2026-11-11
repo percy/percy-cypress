@@ -2113,7 +2113,7 @@ describe('percySnapshot', () => {
   });
 
   describe('withRetry', () => {
-    // Required lazily (like filterSensitiveCookies below) to avoid re-running
+    // Required lazily (like the cookie helpers below) to avoid re-running
     // index.js module-level side effects at spec load time.
     const withRetry = (...args) => require('../..').withRetry(...args);
     const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -2165,80 +2165,149 @@ describe('percySnapshot', () => {
     });
   });
 
-  describe('filterSensitiveCookies', () => {
+  describe('cookie forwarding', () => {
     // Required lazily (like envUtils above) so importing index.js does not
     // re-run its module-level side effects at spec load time.
-    const filterSensitiveCookies = (...args) => require('../..').filterSensitiveCookies(...args);
+    const indexExports = () => require('../..');
+    const OPT_OUT_WARNING = 'Not sending browser cookies to Percy because ' +
+      'PERCY_DO_NOT_USE_CAPTURED_COOKIES is set. Pages or assets that need a logged-in ' +
+      'session may fail to load during asset discovery, so snapshots can render incorrectly.';
 
-    it('strips cookies whose names match the sensitive pattern', () => {
-      const cookies = [
-        { name: 'session_id', value: 's' },
-        { name: 'auth_token', value: 'a' },
-        { name: 'XSRF-TOKEN', value: 'x' },
-        { name: 'theme', value: 'dark' },
-        { name: 'locale', value: 'en' }
-      ];
+    let ogConfig, ogEnv, ogExpose, posted, warnings, origLog;
 
-      const result = filterSensitiveCookies(cookies);
+    // Override only the given keys so Cypress's own internal reads still work.
+    const withConfig = (values) => {
+      Cypress.config = (key, ...rest) =>
+        (rest.length === 0 && typeof key === 'string' && key in values) ? values[key] : ogConfig(key, ...rest);
+    };
+    const withEnv = (values) => {
+      Cypress.env = (key, ...rest) =>
+        (rest.length === 0 && typeof key === 'string' && key in values) ? values[key] : ogEnv(key, ...rest);
+    };
 
-      expect(result.map(c => c.name)).to.deep.equal(['theme', 'locale']);
-    });
+    beforeEach(() => {
+      ogConfig = Cypress.config;
+      ogEnv = Cypress.env;
+      ogExpose = Cypress.expose;
+      posted = [];
+      warnings = [];
 
-    it('keeps a cookie with no name (falls back to empty string)', () => {
-      const cookies = [
-        { value: 'no-name' },
-        { name: 'session', value: 's' }
-      ];
-
-      const result = filterSensitiveCookies(cookies);
-
-      // The nameless cookie is not sensitive, so it is retained; `session` is stripped.
-      expect(result).to.have.length(1);
-      expect(result[0].value).to.equal('no-name');
-    });
-
-    it('returns the input unchanged when it is not an array', () => {
-      expect(filterSensitiveCookies(undefined)).to.be.undefined;
-      expect(filterSensitiveCookies(null)).to.be.null;
-    });
-
-    it('forwards all cookies when percyForwardAllCookies is true', () => {
-      const ogConfig = Cypress.config;
-      const cookies = [
-        { name: 'session_id', value: 's' },
-        { name: 'theme', value: 'dark' }
-      ];
-
-      try {
-        Cypress.config = (key) => (key === 'percyForwardAllCookies' ? true : ogConfig(key));
-        const result = filterSensitiveCookies(cookies);
-        // forwardAll short-circuits, so even the sensitive cookie is returned.
-        expect(result).to.equal(cookies);
-      } finally {
-        Cypress.config = ogConfig;
-      }
-    });
-
-    it('defaults to stripping when reading the config throws', () => {
-      const ogConfig = Cypress.config;
-      const cookies = [
-        { name: 'session_id', value: 's' },
-        { name: 'theme', value: 'dark' }
-      ];
-
-      try {
-        // Only throw for the cookie config key so Cypress's own internal
-        // Cypress.config(...) reads are unaffected.
-        Cypress.config = (key) => {
-          if (key === 'percyForwardAllCookies') throw new Error('config unavailable');
-          return ogConfig(key);
+      cy.then(() => {
+        const shim = indexExports().__getShimForTesting();
+        indexExports().__resetCookieOptOutWarningForTesting();
+        cy.stub(shim, 'postSnapshot').callsFake(async (payload) => {
+          posted.push(payload);
+          return { success: true };
+        });
+        origLog = shim.logger.log;
+        shim.logger.log = (ns, lvl, msg) => {
+          if (lvl === 'warn') warnings.push(msg);
+          return origLog(ns, lvl, msg);
         };
-        const result = filterSensitiveCookies(cookies);
-        // The catch leaves forwardAll false, so sensitive cookies are still stripped.
-        expect(result.map(c => c.name)).to.deep.equal(['theme']);
-      } finally {
-        Cypress.config = ogConfig;
-      }
+      });
+
+      cy.clearCookies();
+      cy.setCookie('session_id', 'sess-123');
+      cy.setCookie('auth_token', 'tok-456');
+      cy.setCookie('theme', 'dark');
+    });
+
+    afterEach(() => {
+      Cypress.config = ogConfig;
+      Cypress.env = ogEnv;
+      if (ogExpose) Cypress.expose = ogExpose;
+      else delete Cypress.expose;
+      indexExports().__getShimForTesting().logger.log = origLog;
+      indexExports().__resetCookieOptOutWarningForTesting();
+    });
+
+    const postedCookieNames = (i = 0) =>
+      (posted[i].domSnapshot.cookies || []).map(c => c.name).sort();
+
+    it('forwards session-like cookies unchanged by default', () => {
+      cy.percySnapshot('cookies-default');
+
+      cy.then(() => {
+        expect(posted).to.have.length(1);
+        expect(postedCookieNames()).to.deep.equal(['auth_token', 'session_id', 'theme']);
+        const session = posted[0].domSnapshot.cookies.find(c => c.name === 'session_id');
+        expect(session.value).to.equal('sess-123');
+        expect(warnings).to.deep.equal([]);
+      });
+    });
+
+    it('sends no cookies and warns once when PERCY_DO_NOT_USE_CAPTURED_COOKIES is set', () => {
+      cy.then(() => withEnv({ PERCY_DO_NOT_USE_CAPTURED_COOKIES: 'true' }));
+
+      cy.percySnapshot('cookies-opt-out-1');
+      cy.percySnapshot('cookies-opt-out-2');
+
+      cy.then(() => {
+        expect(posted).to.have.length(2);
+        expect(posted[0].domSnapshot).to.not.have.property('cookies');
+        expect(posted[1].domSnapshot).to.not.have.property('cookies');
+        expect(warnings).to.deep.equal([OPT_OUT_WARNING]);
+      });
+    });
+
+    it('honours the opt-out from Cypress.expose()', () => {
+      cy.then(() => {
+        Cypress.expose = (key) => (key === 'PERCY_DO_NOT_USE_CAPTURED_COOKIES' ? true : undefined);
+      });
+
+      cy.percySnapshot('cookies-opt-out-expose');
+
+      cy.then(() => {
+        expect(posted[0].domSnapshot).to.not.have.property('cookies');
+        expect(warnings).to.deep.equal([OPT_OUT_WARNING]);
+      });
+    });
+
+    it('honours the percyDoNotUseCapturedCookies Cypress config', () => {
+      cy.then(() => withConfig({ percyDoNotUseCapturedCookies: true }));
+
+      cy.percySnapshot('cookies-opt-out-config');
+
+      cy.then(() => {
+        expect(posted[0].domSnapshot).to.not.have.property('cookies');
+        expect(warnings).to.deep.equal([OPT_OUT_WARNING]);
+      });
+    });
+
+    it('treats a non-true opt-out value as off', () => {
+      cy.then(() => withEnv({ PERCY_DO_NOT_USE_CAPTURED_COOKIES: 'false' }));
+
+      cy.percySnapshot('cookies-opt-out-false');
+
+      cy.then(() => {
+        expect(postedCookieNames()).to.deep.equal(['auth_token', 'session_id', 'theme']);
+        expect(warnings).to.deep.equal([]);
+      });
+    });
+
+    it('still accepts the legacy percyForwardAllCookies config', () => {
+      cy.then(() => withConfig({ percyForwardAllCookies: true }));
+
+      cy.percySnapshot('cookies-legacy-forward-all');
+
+      cy.then(() => {
+        expect(postedCookieNames()).to.deep.equal(['auth_token', 'session_id', 'theme']);
+        expect(warnings).to.deep.equal([]);
+      });
+    });
+
+    it('fails open and forwards cookies when reading the opt-out config throws', () => {
+      const cookies = [{ name: 'session_id', value: 's' }];
+      const log = { warn: cy.stub() };
+
+      cy.then(() => {
+        Cypress.config = (key, ...rest) => {
+          if (key === 'percyDoNotUseCapturedCookies') throw new Error('config unavailable');
+          return ogConfig(key, ...rest);
+        };
+        expect(indexExports().resolveSnapshotCookies(cookies, log)).to.equal(cookies);
+        expect(log.warn).not.to.be.called;
+      });
     });
   });
 });
