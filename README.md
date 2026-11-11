@@ -74,10 +74,11 @@ Percy Cypress now supports comprehensive snapshot options including:
 - **Animation Freezing**: Use `percyCSS` to freeze animations - `percyCSS: 'img { animation: none !important; }'`
 - **Custom CSS**: `percyCSS` - Inject temporary CSS before snapshot
 - **Sync Results**: `sync: true` - Get processed results synchronously
-- **Cookie Capture**: Automatically captures cookies for accurate session reproduction
+- **Cookie Capture**: Automatically captures browser cookies so Percy's asset discovery can load pages and assets that need a logged-in session. To opt out, set `PERCY_DO_NOT_USE_CAPTURED_COOKIES=true` (for example `CYPRESS_PERCY_DO_NOT_USE_CAPTURED_COOKIES=true` or `--env PERCY_DO_NOT_USE_CAPTURED_COOKIES=true`) or the Cypress config `percyDoNotUseCapturedCookies: true`. When opted out, no cookies are sent and a warning is logged once, because pages or assets that need a logged-in session may fail to load during asset discovery and render incorrectly.
 
 ## Cypress Config
 - `percyThrowErrorOnFailure` - If set to true, it will throw an error when one is encountered. By default, it is set to false, and errors are suppressed.
+- `percyDoNotUseCapturedCookies` - If set to true, browser cookies are not sent to Percy (same as `PERCY_DO_NOT_USE_CAPTURED_COOKIES=true`). By default, cookies are forwarded for asset discovery.
 If you are using uncaught exeception then test test will pass.
 ```
 cy.on("uncaught:exception", (e, runnable) => {});
