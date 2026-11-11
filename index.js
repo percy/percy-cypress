@@ -596,17 +596,24 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           // withLog swallows the error (returning it) unless _throw is set,
           // so it must wrap withRetry rather than sit inside it — otherwise
           // the first failure resolves and no retry ever happens.
-          let response = await withLog(() => withRetry(timeout => postSnapshotWithin(timeout, {
-            ...forwardOpts,
-            environmentInfo: ENV_INFO,
-            clientInfo: CLIENT_INFO,
-            domSnapshot,
-            url: doc.URL,
-            name
-          }), log), 'posting dom snapshot', _throw);
+          // Track success directly: a failure can be an Error from another
+          // window (the Cypress driver), which fails an instanceof check here.
+          let posted = false;
+          let response = await withLog(async () => {
+            const res = await withRetry(timeout => postSnapshotWithin(timeout, {
+              ...forwardOpts,
+              environmentInfo: ENV_INFO,
+              clientInfo: CLIENT_INFO,
+              domSnapshot,
+              url: doc.URL,
+              name
+            }), log);
+            posted = true;
+            return res;
+          }, 'posting dom snapshot', _throw);
 
           // postSnapshot resolves without a response when a build error disabled Percy.
-          if (response && !(response instanceof Error)) cylog(name, meta);
+          if (posted && response) cylog(name, meta);
           return response;
         } catch (err) {
           log.error(`Failed to post snapshot "${name}"`, err);

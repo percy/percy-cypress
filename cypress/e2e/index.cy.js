@@ -319,6 +319,28 @@ describe('percySnapshot', () => {
     });
   });
 
+  it('does not log success when the post fails with an error from another window', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    const originalPost = indexShim.postSnapshot;
+
+    cy.then(() => {
+      // Cypress.backend rejects with errors created in the runner window.
+      const ForeignError = window.top.Error;
+      expect(new ForeignError('x')).not.to.be.instanceOf(Error);
+      indexShim.postSnapshot = () => Promise.reject(new ForeignError('backend down'));
+    });
+
+    cy.percySnapshot('Foreign Error Snapshot');
+
+    cy.then(() => {
+      indexShim.postSnapshot = originalPost;
+    });
+
+    cy.get('@log').should((spy) => {
+      expect(spy).not.to.be.calledWith(match({ name: 'percySnapshot', message: 'Foreign Error Snapshot' }));
+    });
+  });
+
   it('posts the snapshot when a retry succeeds', () => {
     const indexShim = require('../../').__getShimForTesting();
     const originalPost = indexShim.postSnapshot;
