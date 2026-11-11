@@ -261,6 +261,25 @@ describe('percySnapshot', () => {
     ]);
   });
 
+  it('does not log a snapshot the CLI rejected because the build failed', () => {
+    const indexShim = require('../../').__getShimForTesting();
+    cy.then(() => helpers.test('build-failure'));
+    cy.then(() => helpers.test('error', '/percy/snapshot'));
+
+    cy.percySnapshot('Build Failure Snapshot');
+
+    cy.then(() => {
+      // postSnapshot disables Percy on a build error; re-enable it for later tests.
+      const enabled = indexShim.percy.enabled;
+      delete indexShim.percy.enabled;
+      expect(enabled).to.equal(false);
+    });
+
+    cy.get('@log').should((spy) => {
+      expect(spy).not.to.be.calledWith(match({ name: 'percySnapshot', message: 'Build Failure Snapshot' }));
+    });
+  });
+
   it('retries a failing snapshot post before logging the error', () => {
     const indexShim = require('../../').__getShimForTesting();
     const originalPost = indexShim.postSnapshot;

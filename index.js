@@ -605,7 +605,8 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
             name
           }), log), 'posting dom snapshot', _throw);
 
-          if (!(response instanceof Error)) cylog(name, meta);
+          // postSnapshot resolves without a response when a build error disabled Percy.
+          if (response && !(response instanceof Error)) cylog(name, meta);
           return response;
         } catch (err) {
           log.error(`Failed to post snapshot "${name}"`, err);
