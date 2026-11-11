@@ -2131,18 +2131,20 @@ describe('percySnapshot', () => {
         await wait(200);
         throw new Error('slow failure');
       };
-      const started = Date.now();
 
-      cy.then(() => withRetry(slowFail, log, { delay: 10, budget: 500 }).then(
-        () => { throw new Error('expected withRetry to reject'); },
-        err => {
-          expect(err.message).to.equal('slow failure');
-          // A third 200ms attempt would end past the 500ms budget.
-          expect(calls).to.equal(2);
-          expect(Date.now() - started).to.be.below(500);
-          expect(errors).to.deep.equal(['Retrying... (1/3)']);
-        }
-      ));
+      cy.then(() => {
+        const started = Date.now();
+        return withRetry(slowFail, log, { delay: 10, budget: 500 }).then(
+          () => { throw new Error('expected withRetry to reject'); },
+          err => {
+            expect(err.message).to.equal('slow failure');
+            // A third 200ms attempt would end past the 500ms budget.
+            expect(calls).to.equal(2);
+            expect(Date.now() - started).to.be.below(500);
+            expect(errors).to.deep.equal(['Retrying... (1/3)']);
+          }
+        );
+      });
     });
 
     it('abandons an attempt that outlives the budget', () => {
@@ -2151,17 +2153,70 @@ describe('percySnapshot', () => {
         calls += 1;
         return new Promise(() => {});
       };
-      const started = Date.now();
 
-      cy.then(() => withRetry(hang, log, { delay: 10, budget: 100 }).then(
+      cy.then(() => {
+        const started = Date.now();
+        return withRetry(hang, log, { delay: 10, budget: 100 }).then(
+          () => { throw new Error('expected withRetry to reject'); },
+          err => {
+            expect(err.message).to.equal('Exceeded 100ms retry budget');
+            expect(calls).to.equal(1);
+            expect(Date.now() - started).to.be.below(1000);
+            expect(errors).to.deep.equal([]);
+          }
+        );
+      });
+    });
+
+    it('does not retry when the CLI rejects the payload with a 400', () => {
+      let calls = 0;
+      const badRequest = async () => {
+        calls += 1;
+        throw Object.assign(new Error('invalid snapshot'), { response: { status: 400 } });
+      };
+
+      cy.then(() => withRetry(badRequest, log, { delay: 10, budget: 1000 }).then(
         () => { throw new Error('expected withRetry to reject'); },
         err => {
-          expect(err.message).to.equal('Exceeded 100ms retry budget');
+          expect(err.message).to.equal('invalid snapshot');
           expect(calls).to.equal(1);
-          expect(Date.now() - started).to.be.below(1000);
           expect(errors).to.deep.equal([]);
         }
       ));
+    });
+
+    it('passes each attempt the remaining budget', () => {
+      const budgets = [];
+      const fail = async (remaining) => {
+        budgets.push(remaining);
+        throw new Error('down');
+      };
+
+      cy.then(() => withRetry(fail, log, { delay: 10, budget: 1000 }).catch(() => {
+        expect(budgets).to.have.length(3);
+        expect(budgets[0]).to.be.within(1, 1000);
+        expect(budgets[1]).to.be.below(budgets[0]);
+      }));
+    });
+
+    it('caps the snapshot post request timeout to the given budget', () => {
+      const index = require('../..');
+
+      cy.then(() => {
+        const backend = cy.stub(Cypress, 'backend').resolves({
+          status: 200, statusText: 'OK', headers: {}, body: ''
+        });
+
+        return index.postSnapshotWithin(1234, { name: 'capped' })
+          // Later requests keep the SDK's default timeout.
+          .then(() => index.__getShimForTesting().request.post('/percy/events', {}))
+          .then(() => {
+            backend.restore();
+            expect(backend).to.be.calledTwice;
+            expect(backend.firstCall).to.be.calledWith('http:request', match({ timeout: 1234 }));
+            expect(backend.secondCall).to.be.calledWith('http:request', match({ timeout: 600000 }));
+          });
+      });
     });
   });
 

@@ -109,10 +109,26 @@ function resolveSnapshotCookies(cookies, log) {
   return null;
 }
 
+// While a snapshot post attempt is being sent, caps the backend request timeout
+// to the attempt's remaining retry budget. Without it, an attempt that withRetry
+// gives up on keeps running for the SDK's default request timeout.
+let snapshotRequestTimeout = null;
+
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
+  if (snapshotRequestTimeout !== null) options.timeout = snapshotRequestTimeout;
   return Cypress.backend('http:request', options);
 };
+
+// postSnapshot issues its request synchronously, so the cap only applies to it.
+function postSnapshotWithin(timeout, options) {
+  snapshotRequestTimeout = timeout;
+  try {
+    return utils.postSnapshot(options);
+  } finally {
+    snapshotRequestTimeout = null;
+  }
+}
 
 // The snapshot post runs inside a cy.then bounded by CY_TIMEOUT. If retries
 // outlive it, Cypress fails the customer's test before withLog can swallow the
@@ -127,11 +143,13 @@ async function withRetry(func, log, { maxNum = 3, delay = 1000, budget = RETRY_B
     const started = Date.now();
     let timer;
     try {
-      return await Promise.race([func(), new Promise((_, reject) => {
+      return await Promise.race([func(deadline - started), new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error(`Exceeded ${budget}ms retry budget`)), deadline - started);
       })]);
     } catch (e) {
       error = e;
+      // A 400 means the CLI rejected the payload, so resending it cannot succeed.
+      if (e.response?.status === 400) break;
       // Only retry if another attempt as slow as this one still fits.
       if (num >= maxNum || Date.now() + delay + (Date.now() - started) > deadline) break;
       log.error(`Retrying... (${num}/${maxNum})`);
@@ -578,7 +596,7 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
           // withLog swallows the error (returning it) unless _throw is set,
           // so it must wrap withRetry rather than sit inside it — otherwise
           // the first failure resolves and no retry ever happens.
-          let response = await withLog(() => withRetry(() => utils.postSnapshot({
+          let response = await withLog(() => withRetry(timeout => postSnapshotWithin(timeout, {
             ...forwardOpts,
             environmentInfo: ENV_INFO,
             clientInfo: CLIENT_INFO,
@@ -613,6 +631,7 @@ module.exports = {
   registerPreflight,
   isResponsiveDOMCaptureValid,
   withRetry,
+  postSnapshotWithin,
   resolveSnapshotCookies,
   __resetCookieOptOutWarningForTesting: () => { cookieOptOutWarned = false; },
   /* istanbul ignore next: test-only escape hatch */
