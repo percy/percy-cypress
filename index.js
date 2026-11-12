@@ -109,10 +109,58 @@ function resolveSnapshotCookies(cookies, log) {
   return null;
 }
 
+// While a snapshot post attempt is being sent, caps the backend request timeout
+// to the attempt's remaining retry budget. Without it, an attempt that withRetry
+// gives up on keeps running for the SDK's default request timeout.
+let snapshotRequestTimeout = null;
+
 utils.request.fetch = async function fetch(url, options) {
   options = { url, retryOnNetworkFailure: false, ...options };
+  if (snapshotRequestTimeout !== null) options.timeout = snapshotRequestTimeout;
   return Cypress.backend('http:request', options);
 };
+
+// postSnapshot issues its request synchronously, so the cap only applies to it.
+function postSnapshotWithin(timeout, options) {
+  snapshotRequestTimeout = timeout;
+  try {
+    return utils.postSnapshot(options);
+  } finally {
+    snapshotRequestTimeout = null;
+  }
+}
+
+// The snapshot post runs inside a cy.then bounded by CY_TIMEOUT. If retries
+// outlive it, Cypress fails the customer's test before withLog can swallow the
+// error, so every attempt and delay must finish inside this budget.
+const RETRY_BUDGET = CY_TIMEOUT - 5000;
+
+async function withRetry(func, log, { maxNum = 3, delay = 1000, budget = RETRY_BUDGET } = {}) {
+  const deadline = Date.now() + budget;
+  let num = 1;
+  let error;
+  while (num <= maxNum) {
+    const started = Date.now();
+    let timer;
+    try {
+      return await Promise.race([func(deadline - started), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Exceeded ${budget}ms retry budget`)), deadline - started);
+      })]);
+    } catch (e) {
+      error = e;
+      // A 400 means the CLI rejected the payload, so resending it cannot succeed.
+      if (e.response?.status === 400) break;
+      // Only retry if another attempt as slow as this one still fits.
+      if (num >= maxNum || Date.now() + delay + (Date.now() - started) > deadline) break;
+      log.error(`Retrying... (${num}/${maxNum})`);
+      await new Promise(res => setTimeout(res, delay));
+    } finally {
+      clearTimeout(timer);
+    }
+    num += 1;
+  }
+  throw error;
+}
 
 function cylog(message, meta) {
   Cypress.log({
@@ -343,23 +391,6 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
     }
   };
 
-  const withRetry = async (func) => {
-    let num = 1;
-    const maxNum = 3;
-    let error;
-    while (num <= maxNum) {
-      try {
-        return await func();
-      } catch (e) {
-        error = e;
-        log.error(`Retrying... (${num}/${maxNum})`);
-        await new Promise(res => setTimeout(res, 1000));
-      }
-      num += 1;
-    }
-    throw error;
-  };
-
   const needsReload = getEnvValue('PERCY_RESPONSIVE_CAPTURE_RELOAD_PAGE')?.toString().toLowerCase() === 'true';
   const originalWidth = Cypress.config('viewportWidth');
   const originalHeight = Cypress.config('viewportHeight');
@@ -561,18 +592,28 @@ Cypress.Commands.add('percySnapshot', (name, options = {}) => {
         const domSnapshot = _isResponsive ? _snapshots : _snapshots[0];
 
         try {
-          let response = await withRetry(async () => await withLog(async () => {
-            return await utils.postSnapshot({
+          // Retry the raw post, and only log once retries are exhausted.
+          // withLog swallows the error (returning it) unless _throw is set,
+          // so it must wrap withRetry rather than sit inside it — otherwise
+          // the first failure resolves and no retry ever happens.
+          // Track success directly: a failure can be an Error from another
+          // window (the Cypress driver), which fails an instanceof check here.
+          let posted = false;
+          let response = await withLog(async () => {
+            const res = await withRetry(timeout => postSnapshotWithin(timeout, {
               ...forwardOpts,
               environmentInfo: ENV_INFO,
               clientInfo: CLIENT_INFO,
               domSnapshot,
               url: doc.URL,
               name
-            });
-          }, 'posting dom snapshot', _throw));
+            }), log);
+            posted = true;
+            return res;
+          }, 'posting dom snapshot', _throw);
 
-          cylog(name, meta);
+          // postSnapshot resolves without a response when a build error disabled Percy.
+          if (posted && response) cylog(name, meta);
           return response;
         } catch (err) {
           log.error(`Failed to post snapshot "${name}"`, err);
@@ -597,6 +638,8 @@ module.exports = {
   createRegion,
   registerPreflight,
   isResponsiveDOMCaptureValid,
+  withRetry,
+  postSnapshotWithin,
   resolveSnapshotCookies,
   __resetCookieOptOutWarningForTesting: () => { cookieOptOutWarned = false; },
   /* istanbul ignore next: test-only escape hatch */
